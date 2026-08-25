@@ -150,7 +150,7 @@ BarWidget {
             width: Style.space(12)
             height: Style.space(12)
             anchors.verticalCenter: parent.verticalCenter
-            source: engine.iconUrl(modelData.providerId)
+            source: engine.iconUrl(modelData.providerId, root.bar ? root.bar.background : Color.background)
             sourceSize.width: Style.space(24)
             sourceSize.height: Style.space(24)
             fillMode: Image.PreserveAspectFit

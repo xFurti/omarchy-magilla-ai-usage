@@ -296,7 +296,7 @@ Panel {
                       Image {
                         width: Style.space(14)
                         height: Style.space(14)
-                        source: engine.iconUrl(modelData.providerId)
+                        source: engine.iconUrl(modelData.providerId, root.surface)
                         sourceSize.width: Style.space(28)
                         sourceSize.height: Style.space(28)
                       }
@@ -435,7 +435,7 @@ Panel {
           width: Style.space(20)
           height: Style.space(20)
           anchors.verticalCenter: parent.verticalCenter
-          source: engine ? engine.iconUrl(card.provider.providerId) : ""
+          source: engine ? engine.iconUrl(card.provider.providerId, root.surface) : ""
           sourceSize.width: Style.space(40)
           sourceSize.height: Style.space(40)
         }

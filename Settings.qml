@@ -138,7 +138,7 @@ Column {
             width: Style.space(18)
             height: Style.space(18)
             anchors.verticalCenter: parent.verticalCenter
-            source: root.engine ? root.engine.iconUrl(modelData.providerId) : ""
+            source: root.engine ? root.engine.iconUrl(modelData.providerId, Color.popups.background) : ""
             sourceSize.width: Style.space(36)
             sourceSize.height: Style.space(36)
             fillMode: Image.PreserveAspectFit

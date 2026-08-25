@@ -215,15 +215,34 @@ Item {
     detectedFile.reload()
   }
 
-  function iconUrl(providerId) {
-    return Qt.resolvedUrl("assets/icons/" + providerId + ".svg")
+  function colorChannelLuminance(value) {
+    var channel = Number(value)
+    if (!isFinite(channel)) return 0
+    return channel <= 0.03928 ? channel / 12.92 : Math.pow((channel + 0.055) / 1.055, 2.4)
+  }
+
+  function colorLuminance(color) {
+    return 0.2126 * colorChannelLuminance(color.r)
+      + 0.7152 * colorChannelLuminance(color.g)
+      + 0.0722 * colorChannelLuminance(color.b)
+  }
+
+  function iconUrl(providerId, surfaceColor) {
+    var id = String(providerId || "")
+    if (id === "crush") return Qt.resolvedUrl("assets/icons/crush.png")
+    var lightSurface = false
+    if (surfaceColor !== undefined && surfaceColor !== null)
+      lightSurface = colorLuminance(surfaceColor) >= 0.5
+    if (lightSurface && (id === "grok" || id === "codex" || id === "copilot" || id === "pi"))
+      return Qt.resolvedUrl("assets/icons/" + id + "-light.svg")
+    return Qt.resolvedUrl("assets/icons/" + id + ".svg")
   }
 
   function magillaUrl() {
-    return Qt.resolvedUrl("assets/magilla-mark.svg")
+    return Qt.resolvedUrl("assets/magilla-mark.png")
   }
 
   function magillaFullUrl() {
-    return Qt.resolvedUrl("assets/magilla.svg")
+    return Qt.resolvedUrl("assets/magilla.png")
   }
 }

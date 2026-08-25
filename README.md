@@ -5,7 +5,7 @@ A Magilla-themed [Omarchy](https://omarchy.org/) shell plugin for people who run
 Purple derby, banana yellow, soft pink — playful enough to spot on the bar, quiet enough to live there all day. Magilla watches Grok, Cursor, Claude Code, Codex, OpenCode, and the rest of the usual suspects, then puts leftover quota, plan names, and reset countdowns in one place.
 
 <p align="center">
-  <img src="assets/magilla.svg" alt="Magilla mascot" width="128" height="128">
+  <img src="assets/magilla-mark.png" alt="Magilla mascot" width="160" height="160">
 </p>
 
 ## Features
@@ -16,6 +16,7 @@ Purple derby, banana yellow, soft pink — playful enough to spot on the bar, qu
 - **Usage records** — reuses Omarchy's Claude / Codex / Fireworks collectors, plus Magilla collectors for Grok, Cursor, OpenCode, Gemini, Copilot, Crush, and Pi
 - **Keyboard** — `Esc` closes (or leaves settings), `R` refreshes, `S` opens settings, `Tab` walks neighboring bar panels
 - Light and dark Omarchy themes still apply; Magilla purple stays on the chrome
+- Official provider marks (Grok, Cursor, Claude, Codex, OpenCode, Gemini, Copilot, Crush, Pi, Fireworks) plus a generated Magilla mascot
 
 ## Screenshots
 
