@@ -48,6 +48,16 @@ Magilla can sit next to Omarchy's built-in Agents widget. If you only want one u
 omarchy plugin disable omarchy.agents
 ```
 
+## Requirements
+
+- **Python 3** with the standard library only. No pip packages, no extra system packages, no sudo.
+- **Optional:** Omarchy's first-party `omarchy-agent-usage-claude`, `omarchy-agent-usage-codex`, and `omarchy-agent-usage-fireworks` when those CLIs are installed. Magilla reuses them if present and otherwise stays quiet.
+- Collectors talk to provider APIs only with credentials already on disk (Grok `auth.json`, Cursor app session). Magilla does not store API keys, cookies, or emails.
+
+Install and enable go through `omarchy plugin add` / `omarchy plugin enable`. Magilla does not rewrite `shell.json` or other plugins unless you change its own bar settings.
+
+Provider product marks in `assets/icons/` remain the trademarks of their owners. Sources are listed in [`assets/SOURCES.md`](assets/SOURCES.md). Magilla is not affiliated with those tools.
+
 ## Remove
 
 ```bash
@@ -166,3 +176,5 @@ Adding a provider: register a detector in `collectors/detect.py`, a `collect()` 
 ## License
 
 [MIT](LICENSE) © 2026 Leonardo Bassanello (xFurti)
+
+Third-party product logos in `assets/icons/` are trademarks of their respective owners and are used only to identify those tools. See [`assets/SOURCES.md`](assets/SOURCES.md).
