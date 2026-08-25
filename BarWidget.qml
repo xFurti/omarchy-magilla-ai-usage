@@ -6,17 +6,20 @@ import qs.Ui
 import "Model.js" as Model
 import "Theme.js" as Theme
 
+// IpcHandler requires Quickshell.Io (same imports as omarchy.clock).
+
 // Compact Magilla chip for the Omarchy bar. Left click opens the panel,
 // right click refreshes. Up to three pinned providers sit beside the mark.
 BarWidget {
   id: root
   moduleName: "io.github.xfurti.magilla-ai-usage"
 
-  readonly property var barProviders: engine.barProviders
+  readonly property var barProviders: (engine && engine.barProviders) ? engine.barProviders : []
   readonly property string displayStyle: String(setting("displayStyle", "percent"))
   readonly property bool alarming: {
-    for (var i = 0; i < barProviders.length; i++) {
-      if (barProviders[i].status === "exhausted" || barProviders[i].status === "low")
+    var list = root.barProviders || []
+    for (var i = 0; i < list.length; i++) {
+      if (list[i] && (list[i].status === "exhausted" || list[i].status === "low"))
         return true
     }
     return false
@@ -79,8 +82,9 @@ BarWidget {
   }
 
   IpcHandler {
-    target: root.moduleName
-    function refresh(): string { root.refresh(); return "ok" }
+    target: "io.github.xfurti.magilla-ai-usage"
+
+    function refresh(): void { root.broadcast("refresh") }
     function open(): void { root.open() }
     function close(): void { root.close() }
     function show(): void { root.open() }

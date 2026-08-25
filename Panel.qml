@@ -39,7 +39,11 @@ Panel {
     return providers.length > 0 ? providers[0] : null
   }
 
-  function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)) }
+  function clamp(v, lo, hi) {
+    var n = Number(v)
+    if (!isFinite(n)) n = lo
+    return Math.max(lo, Math.min(hi, n))
+  }
   function alpha(c, a) { return Qt.rgba(c.r, c.g, c.b, a) }
 
   function persistSettings(values) {
@@ -315,7 +319,7 @@ Panel {
 
                     Meter {
                       width: parent.width
-                      value: modelData.usedPercent
+                      value: isFinite(Number(modelData.usedPercent)) ? Number(modelData.usedPercent) : -1
                       fill: root.statusColor(modelData.status)
                     }
 
@@ -376,19 +380,20 @@ Panel {
     implicitHeight: thickness
 
     Rectangle {
+      id: meterTrack
       anchors.fill: parent
       radius: height / 2
       color: root.alpha(root.magilla, 0.18)
-    }
 
-    Rectangle {
-      anchors.left: parent.left
-      anchors.verticalCenter: parent.verticalCenter
-      height: parent.height
-      radius: parent.radius
-      width: parent.width * root.clamp(meter.value, 0, 1)
-      color: meter.value < 0 ? "transparent" : meter.fill
-      Behavior on width { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+      Rectangle {
+        anchors.left: parent.left
+        anchors.verticalCenter: parent.verticalCenter
+        height: parent.height
+        radius: meterTrack.radius
+        width: meterTrack.width * root.clamp(meter.value, 0, 1)
+        color: meter.value < 0 ? "transparent" : meter.fill
+        Behavior on width { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+      }
     }
   }
 
@@ -528,7 +533,11 @@ Panel {
 
           Meter {
             width: parent.width
-            value: Number(modelData.percent) > 1 ? Number(modelData.percent) / 100 : Number(modelData.percent)
+            value: {
+              var p = Number(modelData.percent)
+              if (!isFinite(p) || p < 0) return -1
+              return p > 1 ? p / 100 : p
+            }
             fill: root.statusColor(card.provider ? card.provider.status : "idle")
           }
 
