@@ -115,11 +115,7 @@ Panel {
   function heroMeta(p) {
     if (!p) return ""
     if (String(p.usageStatusText || "") !== "") return p.usageStatusText
-    var bits = []
-    if (p.tierLabel) bits.push(p.tierLabel)
-    if (engine && engine.lastRefreshAt) bits.push(Model.formatClock(engine.lastRefreshAt))
-    else if (engine && engine.refreshing) bits.push("Refreshing")
-    return bits.join(" · ")
+    return String(p.tierLabel || "")
   }
 
   onProviderIndexChanged: if (panelFlick) panelFlick.contentY = 0
@@ -176,6 +172,42 @@ Panel {
           id: column
           width: panelFlick.width
           spacing: Style.space(12)
+
+          Row {
+            visible: !root.settingsOpen
+            width: parent.width
+            spacing: Style.space(10)
+
+            Image {
+              width: Style.space(28)
+              height: Style.space(28)
+              anchors.verticalCenter: parent.verticalCenter
+              source: engine ? engine.magillaUrl() : ""
+              sourceSize.width: Style.space(56)
+              sourceSize.height: Style.space(56)
+              fillMode: Image.PreserveAspectFit
+            }
+
+            Column {
+              anchors.verticalCenter: parent.verticalCenter
+              spacing: Style.space(1)
+
+              Text {
+                text: "Magilla"
+                color: root.contentForeground
+                font.family: root.contentFontFamily
+                font.pixelSize: Style.font.subtitle
+                font.bold: true
+              }
+
+              Text {
+                text: engine && engine.refreshing ? "Refreshing" : (engine && engine.lastRefreshAt ? Model.formatClock(engine.lastRefreshAt) : "")
+                color: root.dim
+                font.family: root.contentFontFamily
+                font.pixelSize: Style.font.caption
+              }
+            }
+          }
 
           PanelHero {
             visible: !root.settingsOpen && !!root.provider

@@ -149,16 +149,13 @@ BarWidget {
         }
       }
 
-      Image {
+      Text {
         visible: root.barProviders.length === 0
-        width: Style.space(14)
-        height: Style.space(14)
         anchors.verticalCenter: parent.verticalCenter
-        source: engine.magillaUrl()
-        sourceSize.width: Style.space(28)
-        sourceSize.height: Style.space(28)
-        fillMode: Image.PreserveAspectFit
-        opacity: engine.refreshing ? 0.55 : 1
+        text: "󱚣"
+        color: root.fg
+        font.family: root.bar ? root.bar.fontFamily : Style.font.family
+        font.pixelSize: Style.bar.iconFont
       }
     }
 
@@ -169,20 +166,28 @@ BarWidget {
       spacing: Style.space(2)
 
       Repeater {
-        model: root.barProviders.length > 0 ? root.barProviders : [{ providerId: "", status: "idle" }]
+        model: root.barProviders
 
         Image {
           required property var modelData
           width: Style.space(14)
           height: Style.space(14)
           anchors.horizontalCenter: parent.horizontalCenter
-          source: modelData.providerId
-            ? engine.iconUrl(modelData.providerId, root.bar ? root.bar.background : Color.background)
-            : engine.magillaUrl()
+          source: engine.iconUrl(modelData.providerId, root.bar ? root.bar.background : Color.background)
           sourceSize.width: Style.space(28)
           sourceSize.height: Style.space(28)
           fillMode: Image.PreserveAspectFit
         }
+      }
+
+      Text {
+        visible: root.barProviders.length === 0
+        width: parent.width
+        horizontalAlignment: Text.AlignHCenter
+        text: "󱚣"
+        color: root.fg
+        font.family: root.bar ? root.bar.fontFamily : Style.font.family
+        font.pixelSize: Style.bar.iconFont
       }
     }
   }
