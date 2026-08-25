@@ -255,6 +255,8 @@ function hasLiveData(provider) {
 
 function windowKind(limit) {
   var text = String((limit && (limit.title || limit.label)) || "").toLowerCase()
+  if (text.indexOf("5-hour") >= 0 || text.indexOf("5h") >= 0 || text.indexOf("rolling") >= 0)
+    return "5-hour"
   if (text.indexOf("week") >= 0) return "weekly"
   if (text.indexOf("month") >= 0 || text.indexOf("cursor") >= 0 || text.indexOf("other") >= 0)
     return "monthly"
