@@ -121,7 +121,7 @@ Detection honors environment variables instead of baking in fragile absolute pat
 | `cursor` | Cursor | `$XDG_CONFIG_HOME/Cursor`, `cursor` / `cursor-agent` | Cursor dashboard plan usage (app session) |
 | `claude` | Claude Code | `$CLAUDE_CONFIG_DIR`, `claude` CLI | Omarchy `omarchy-agent-usage-claude` when present |
 | `codex` | OpenAI Codex | `$CODEX_HOME`, `codex` CLI | Omarchy `omarchy-agent-usage-codex` when present |
-| `opencode` | OpenCode | `~/.config/opencode`, `~/.local/share/opencode` | Local session token ledger |
+| `opencode` | OpenCode | `~/.config/opencode`, `~/.local/share/opencode/auth.json` (Go/Zen `/connect` keys) | Local session token ledger |
 | `fireworks` | Fireworks | `FIREWORKS_API_KEY`, `~/.fireworks` | Omarchy `omarchy-agent-usage-fireworks` when present |
 | `gemini` | Gemini CLI | `gemini` CLI, `GEMINI_API_KEY`, `~/.gemini` | Detection + local logs when present |
 | `copilot` | GitHub Copilot CLI | `copilot` CLI, GitHub Copilot config dirs | Detection (quota API not public) |

@@ -15,7 +15,7 @@ import lib
 
 AGENT_ID = "opencode"
 AGENT_NAME = "OpenCode"
-AUTH_HELP = "Sign in to OpenCode to start recording sessions."
+AUTH_HELP = "Connect a provider in OpenCode (/connect) to start recording sessions."
 
 
 def _db_path() -> Path:
@@ -88,7 +88,15 @@ def collect(force: bool = False, limits_only: bool = False) -> dict[str, Any]:
 
   record.update(acc.as_fields())
   record["ready"] = record.get("hasLocalStats") is True
+  auth = lib.xdg_data() / "opencode" / "auth.json"
+  if not auth.is_file():
+    auth = lib.xdg_config() / "opencode" / "auth.json"
+  auth_data = lib.read_json(auth) or {}
+  if isinstance(auth_data, dict) and "opencode-go" in auth_data:
+    record["tierLabel"] = "OpenCode Go"
+  elif isinstance(auth_data, dict) and "opencode" in auth_data:
+    record["tierLabel"] = "OpenCode Zen"
   if not record["ready"]:
     record["usageStatusText"] = "OpenCode is installed"
-    record["authHelpText"] = "Sessions will appear here after you chat in OpenCode."
+    record["authHelpText"] = AUTH_HELP
   return record

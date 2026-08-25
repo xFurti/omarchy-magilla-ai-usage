@@ -134,8 +134,12 @@ def detect_opencode() -> dict[str, Any]:
     traces.append(lib.display_path(config))
   if db.is_file():
     traces.append(lib.display_path(db))
-  authenticated = False
-  if db.is_file():
+  if auth.is_file():
+    traces.append(lib.display_path(auth))
+  # OpenCode Go / Zen /connect stores API keys in auth.json. The SQLite
+  # account/credential tables are a different login path and are often empty.
+  authenticated = _auth_json_has_key(auth)
+  if not authenticated and db.is_file():
     try:
       conn = sqlite3.connect(db.resolve().as_uri() + "?mode=ro", uri=True, timeout=2)
       try:
@@ -145,9 +149,7 @@ def detect_opencode() -> dict[str, Any]:
       finally:
         conn.close()
     except sqlite3.Error:
-      authenticated = lib.non_empty_file(auth)
-  elif lib.non_empty_file(auth):
-    authenticated = True
+      authenticated = False
   installed = bool(cli or config.is_dir() or data.is_dir())
   return _result("opencode", "OpenCode", cli, installed, authenticated, traces)
 
