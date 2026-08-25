@@ -73,9 +73,14 @@ function joinBarSlots(slots) {
   return parseBarSlots(slots).join(",")
 }
 
-function providerEnabled(settings, id) {
-  if (!settings || !settings.providers || !settings.providers[id]) return true
-  return settings.providers[id].enabled !== false
+function hasExplicitEnable(settings, id) {
+  return !!(settings && settings.providers && settings.providers[id] && settings.providers[id].enabled !== undefined)
+}
+
+function providerEnabled(settings, id, authenticated) {
+  if (hasExplicitEnable(settings, id))
+    return settings.providers[id].enabled !== false
+  return authenticated === true
 }
 
 function usedPercent(provider) {
@@ -257,8 +262,7 @@ function autoBarSlots(providers) {
   for (var i = 0; i < ranked.length; i++) {
     var p = ranked[i]
     if (!p || !p.enabled) continue
-    if (!p.detected && !hasUsage(p)) continue
-    if (statusOf(p) === "idle" && !hasUsage(p)) continue
+    if (!p.authenticated && !hasUsage(p)) continue
     picked.push(p.providerId)
     if (picked.length >= 3) break
   }
@@ -266,7 +270,7 @@ function autoBarSlots(providers) {
 }
 
 function mergeProviders(catalog, records, settings) {
-  var showIdle = parseOn(settings ? settings.showIdleProviders : "On", true)
+  var showIdle = parseOn(settings ? settings.showIdleProviders : "Off", false)
   var enabledMap = settings && settings.providers ? settings.providers : {}
   var byId = {}
 
@@ -280,7 +284,7 @@ function mergeProviders(catalog, records, settings) {
       installed: false,
       authenticated: false,
       ready: false,
-      enabled: providerEnabled(settings, id),
+      enabled: false,
       traces: [],
       cli: "",
       tierLabel: "",
@@ -352,17 +356,17 @@ function mergeProviders(catalog, records, settings) {
   var out = []
   for (var id2 in byId) {
     var p = byId[id2]
-    p.enabled = enabledMap[id2] ? enabledMap[id2].enabled !== false : true
+    if (hasExplicitEnable(settings, id2))
+      p.enabled = enabledMap[id2].enabled !== false
+    else
+      p.enabled = p.authenticated === true
     p.status = statusOf(p)
     p.statusLabel = statusLabel(p.status)
     p.usedPercent = usedPercent(p)
     p.remainingPercent = remainingPercent(p)
     p.headline = bindingLimit(p)
-    var visible = p.enabled && (p.detected || hasUsage(p) || (showIdle && p.known && p.installed))
-    if (visible || p.known) {
-      p.visibleInPanel = !!(p.enabled && (p.detected || hasUsage(p) || (showIdle && p.installed)))
-      out.push(p)
-    }
+    p.visibleInPanel = !!(p.enabled && (p.authenticated || hasUsage(p) || (showIdle && p.installed)))
+    if (p.visibleInPanel || p.known) out.push(p)
   }
 
   out.sort(function(a, b) {
@@ -375,7 +379,7 @@ function mergeProviders(catalog, records, settings) {
 function resolveBarProviders(all, settings) {
   var enabled = []
   for (var i = 0; i < all.length; i++) {
-    if (all[i].enabled && (all[i].detected || hasUsage(all[i]) || all[i].installed)) enabled.push(all[i])
+    if (all[i].enabled && all[i].visibleInPanel) enabled.push(all[i])
   }
   var wanted = parseBarSlots(settings ? settings.barSlots : "")
   var byId = {}

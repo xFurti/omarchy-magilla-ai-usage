@@ -98,7 +98,7 @@ def detect_claude() -> dict[str, Any]:
   credentials = home / ".credentials.json"
   if not credentials.is_file():
     credentials = home / "credentials.json"
-  authenticated = lib.non_empty_file(credentials) or (home / "sessions").is_dir()
+  authenticated = lib.non_empty_file(credentials)
   if credentials.is_file():
     traces.append(lib.display_path(credentials))
   return _result("claude", "Claude Code", cli, bool(cli or home.is_dir()), authenticated, traces)
@@ -141,8 +141,7 @@ def detect_opencode() -> dict[str, Any]:
       try:
         accounts = conn.execute("SELECT COUNT(*) FROM account").fetchone()
         creds = conn.execute("SELECT COUNT(*) FROM credential").fetchone()
-        sessions = conn.execute("SELECT COUNT(*) FROM session").fetchone()
-        authenticated = bool((accounts and accounts[0]) or (creds and creds[0]) or (sessions and sessions[0]))
+        authenticated = bool((accounts and accounts[0]) or (creds and creds[0]))
       finally:
         conn.close()
     except sqlite3.Error:

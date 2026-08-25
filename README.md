@@ -58,7 +58,9 @@ Left-click the Magilla chip, then **Magilla Settings**.
    - `remaining` — leftover quota (`Grok 68%`)
    - `compact` — numbers only
 
-Leave the bar list empty to let Magilla auto-pick the busiest signed-in tools.
+By default Magilla only enables tools that are **signed in**. Installed CLIs without a login stay off until you turn them on in Settings.
+
+Leave the bar list empty to auto-pick up to three signed-in tools.
 
 From the command line:
 

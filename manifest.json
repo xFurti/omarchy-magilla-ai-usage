@@ -21,7 +21,7 @@
       "barSlots": "",
       "displayStyle": "percent",
       "refreshIntervalSec": 300,
-      "showIdleProviders": true,
+      "showIdleProviders": "Off",
       "providers": {}
     },
     "schema": [
@@ -52,9 +52,9 @@
       {
         "key": "showIdleProviders",
         "type": "enum",
-        "label": "Show detected tools without usage yet",
+        "label": "Show tools that are installed but not signed in",
         "options": ["On", "Off"],
-        "defaultValue": "On"
+        "defaultValue": "Off"
       }
     ]
   }

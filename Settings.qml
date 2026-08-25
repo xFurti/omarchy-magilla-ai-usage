@@ -2,10 +2,7 @@ import QtQuick
 import qs.Commons
 import qs.Ui
 import "Model.js" as Model
-import "Theme.js" as Theme
 
-// In-panel settings. Persistence goes through the host so shell.json stays
-// the single source of truth, same as first-party Omarchy widgets.
 Column {
   id: root
   width: parent ? parent.width : implicitWidth
@@ -18,8 +15,22 @@ Column {
   readonly property color dim: host ? host.dim : Qt.darker(foreground, 1.55)
   readonly property string fontFamily: host ? host.contentFontFamily : Style.font.family
   readonly property var settings: host ? host.settings : ({})
-  readonly property var allProviders: engine ? engine.providers : []
   readonly property var barSlots: Model.parseBarSlots(settings.barSlots)
+
+  readonly property var signedIn: {
+    var list = []
+    var all = engine ? engine.providers : []
+    for (var i = 0; i < all.length; i++) if (all[i].authenticated) list.push(all[i])
+    return list
+  }
+
+  readonly property var otherInstalls: {
+    var list = []
+    var all = engine ? engine.providers : []
+    for (var i = 0; i < all.length; i++)
+      if (!all[i].authenticated && all[i].installed) list.push(all[i])
+    return list
+  }
 
   function persist(values) {
     if (host && host.persistSettings) host.persistSettings(values)
@@ -38,42 +49,21 @@ Column {
     persist({ barSlots: Model.joinBarSlots(Model.pinSlots(settings.barSlots, id, on)) })
   }
 
-  function moveSlot(id, delta) {
-    var slots = Model.parseBarSlots(settings.barSlots)
-    var index = slots.indexOf(id)
-    if (index < 0) return
-    var next = index + delta
-    if (next < 0 || next >= slots.length) return
-    var copy = slots.slice()
-    copy.splice(index, 1)
-    copy.splice(next, 0, id)
-    persist({ barSlots: Model.joinBarSlots(copy) })
-  }
-
   PanelSectionHeader {
     width: parent.width
-    text: "BAR"
+    text: "DISPLAY"
     foreground: root.foreground
     fontFamily: root.fontFamily
   }
 
-  Text {
-    width: parent.width
-    text: "Pick up to three providers for the bar. Leave the list empty and Magilla will auto-pick the busiest ones."
-    color: root.dim
-    font.family: root.fontFamily
-    font.pixelSize: Style.font.caption
-    wrapMode: Text.WordWrap
-  }
-
   Dropdown {
     width: parent.width
-    label: "Display style"
+    label: "Bar label"
     value: String(root.settings.displayStyle || "percent")
     options: [
       { value: "percent", label: "Percent used" },
       { value: "remaining", label: "Percent remaining" },
-      { value: "compact", label: "Compact numbers" }
+      { value: "compact", label: "Percent only" }
     ]
     foreground: root.foreground
     fontFamily: root.fontFamily
@@ -82,7 +72,7 @@ Column {
 
   NumberField {
     width: parent.width
-    label: "Refresh every (seconds)"
+    label: "Refresh interval (seconds)"
     value: Math.max(30, Number(root.settings.refreshIntervalSec || 300))
     from: 30
     to: 3600
@@ -92,126 +82,108 @@ Column {
     onModified: function(next) { root.persist({ refreshIntervalSec: next }) }
   }
 
-  Toggle {
-    width: parent.width
-    label: "Show idle tools"
-    description: "Keep detected CLIs visible even before they report usage."
-    checked: Model.parseOn(root.settings.showIdleProviders, true)
-    foreground: root.foreground
-    fontFamily: root.fontFamily
-    onClicked: root.persist({ showIdleProviders: checked ? "Off" : "On" })
-  }
-
   PanelSeparator { foreground: root.foreground }
 
   PanelSectionHeader {
     width: parent.width
-    text: "PROVIDERS"
+    text: "SIGNED IN"
+    foreground: root.foreground
+    fontFamily: root.fontFamily
+  }
+
+  Text {
+    visible: root.signedIn.length === 0
+    width: parent.width
+    text: "Nothing signed in on this machine yet."
+    color: root.dim
+    font.family: root.fontFamily
+    font.pixelSize: Style.font.caption
+  }
+
+  Repeater {
+    model: root.signedIn
+    ProviderRow {
+      required property var modelData
+      width: root.width
+      provider: modelData
+      allowPin: true
+    }
+  }
+
+  PanelSeparator {
+    visible: root.otherInstalls.length > 0
+    foreground: root.foreground
+  }
+
+  PanelSectionHeader {
+    visible: root.otherInstalls.length > 0
+    width: parent.width
+    text: "INSTALLED, NOT SIGNED IN"
     foreground: root.foreground
     fontFamily: root.fontFamily
   }
 
   Repeater {
-    model: root.allProviders
-
-    BorderSurface {
+    model: root.otherInstalls
+    ProviderRow {
       required property var modelData
       width: root.width
-      implicitHeight: row.implicitHeight + Style.space(16)
-      radius: Style.cornerRadius
-      color: Style.controlFill(false, false, root.foreground, Color.accent)
+      provider: modelData
+      allowPin: false
+    }
+  }
 
-      Column {
-        id: row
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.verticalCenter: parent.verticalCenter
-        anchors.leftMargin: Style.space(12)
-        anchors.rightMargin: Style.space(12)
-        spacing: Style.space(8)
+  component ProviderRow: Item {
+    id: row
+    property var provider: null
+    property bool allowPin: true
+    readonly property bool showPin: allowPin && provider && provider.enabled
+    implicitHeight: Style.space(44)
 
-        Row {
-          width: parent.width
-          spacing: Style.space(8)
+    Image {
+      id: mark
+      width: Style.space(16)
+      height: Style.space(16)
+      anchors.left: parent.left
+      anchors.verticalCenter: parent.verticalCenter
+      source: root.engine && row.provider ? root.engine.iconUrl(row.provider.providerId, Color.popups.background) : ""
+      sourceSize.width: Style.space(32)
+      sourceSize.height: Style.space(32)
+      fillMode: Image.PreserveAspectFit
+    }
 
-          Image {
-            width: Style.space(18)
-            height: Style.space(18)
-            anchors.verticalCenter: parent.verticalCenter
-            source: root.engine ? root.engine.iconUrl(modelData.providerId, Color.popups.background) : ""
-            sourceSize.width: Style.space(36)
-            sourceSize.height: Style.space(36)
-            fillMode: Image.PreserveAspectFit
-          }
+    Text {
+      anchors.left: mark.right
+      anchors.leftMargin: Style.space(10)
+      anchors.right: row.showPin ? pinBtn.left : enabledSwitch.left
+      anchors.rightMargin: Style.space(8)
+      anchors.verticalCenter: parent.verticalCenter
+      text: row.provider ? row.provider.providerName : ""
+      color: root.foreground
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.body
+      elide: Text.ElideRight
+    }
 
-          Column {
-            width: parent.width - Style.space(26)
-            spacing: Style.space(2)
+    ToggleSwitch {
+      id: enabledSwitch
+      anchors.right: parent.right
+      anchors.verticalCenter: parent.verticalCenter
+      checked: !!(row.provider && row.provider.enabled)
+      onToggled: if (row.provider) root.setProviderEnabled(row.provider.providerId, !row.provider.enabled)
+    }
 
-            Text {
-              text: modelData.providerName
-              color: root.foreground
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.body
-              font.bold: true
-            }
-
-            Text {
-              text: modelData.detected
-                ? (modelData.traces && modelData.traces.length ? modelData.traces.join(" · ") : "Detected")
-                : "Not found on this machine"
-              color: root.dim
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.caption
-              elide: Text.ElideRight
-              width: parent.width
-            }
-          }
-        }
-
-        Row {
-          spacing: Style.space(8)
-
-          Button {
-            text: modelData.enabled ? "Enabled" : "Disabled"
-            selected: modelData.enabled
-            bordered: true
-            foreground: root.foreground
-            fontFamily: root.fontFamily
-            fontSize: Style.font.caption
-            onClicked: root.setProviderEnabled(modelData.providerId, !modelData.enabled)
-          }
-
-          Button {
-            text: root.barSlots.indexOf(modelData.providerId) >= 0 ? "On bar" : "Pin to bar"
-            selected: root.barSlots.indexOf(modelData.providerId) >= 0
-            bordered: true
-            enabled: modelData.enabled && modelData.detected
-            foreground: root.foreground
-            fontFamily: root.fontFamily
-            fontSize: Style.font.caption
-            onClicked: root.setPinned(modelData.providerId, root.barSlots.indexOf(modelData.providerId) < 0)
-          }
-
-          PanelActionButton {
-            visible: root.barSlots.indexOf(modelData.providerId) >= 0
-            iconText: "󰅃"
-            tooltipText: "Move up"
-            foreground: root.foreground
-            fontFamily: root.fontFamily
-            onClicked: root.moveSlot(modelData.providerId, -1)
-          }
-
-          PanelActionButton {
-            visible: root.barSlots.indexOf(modelData.providerId) >= 0
-            iconText: "󰅀"
-            tooltipText: "Move down"
-            foreground: root.foreground
-            fontFamily: root.fontFamily
-            onClicked: root.moveSlot(modelData.providerId, 1)
-          }
-        }
-      }
+    PanelActionButton {
+      id: pinBtn
+      visible: row.allowPin && row.provider && row.provider.enabled
+      anchors.right: enabledSwitch.left
+      anchors.rightMargin: Style.space(4)
+      anchors.verticalCenter: parent.verticalCenter
+      iconText: root.barSlots.indexOf(row.provider ? row.provider.providerId : "") >= 0 ? "󰐃" : "󰤱"
+      tooltipText: root.barSlots.indexOf(row.provider ? row.provider.providerId : "") >= 0 ? "Unpin from bar" : "Pin to bar"
+      foreground: root.foreground
+      fontFamily: root.fontFamily
+      onClicked: if (row.provider) root.setPinned(row.provider.providerId, root.barSlots.indexOf(row.provider.providerId) < 0)
     }
   }
 }

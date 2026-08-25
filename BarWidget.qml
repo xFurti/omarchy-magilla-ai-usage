@@ -4,18 +4,16 @@ import Quickshell.Io
 import qs.Commons
 import qs.Ui
 import "Model.js" as Model
-import "Theme.js" as Theme
 
-// IpcHandler requires Quickshell.Io (same imports as omarchy.clock).
-
-// Compact Magilla chip for the Omarchy bar. Left click opens the panel,
-// right click refreshes. Up to three pinned providers sit beside the mark.
+// Compact signed-in usage chips. Left click opens the panel, right click refreshes.
 BarWidget {
   id: root
   moduleName: "io.github.xfurti.magilla-ai-usage"
 
   readonly property var barProviders: (engine && engine.barProviders) ? engine.barProviders : []
   readonly property string displayStyle: String(setting("displayStyle", "percent"))
+  readonly property color fg: bar ? bar.barForeground : Color.foreground
+  readonly property color alarm: bar ? bar.urgent : Color.urgent
   readonly property bool alarming: {
     var list = root.barProviders || []
     for (var i = 0; i < list.length; i++) {
@@ -101,13 +99,12 @@ BarWidget {
     hasVisualContent: true
     tooltipText: Model.tooltipSummary(root.barProviders, engine.nowMs)
     active: root.alarming
-    horizontalMargin: 8.5
-    fixedWidth: root.vertical ? -1 : Math.max(Style.space(28), chipsRow.implicitWidth + Style.space(16))
-    fixedHeight: root.vertical ? Math.max(Style.bar.iconSlot, chipsCol.implicitHeight + Style.space(8)) : -1
+    horizontalMargin: 8
+    fixedWidth: root.vertical ? -1 : Math.max(Style.space(22), chipsRow.implicitWidth + Style.space(14))
+    fixedHeight: root.vertical ? Math.max(Style.bar.iconSlot, chipsCol.implicitHeight + Style.space(6)) : -1
 
     onPressed: function(buttonCode) {
-      if (buttonCode === Qt.RightButton) root.refresh()
-      else if (buttonCode === Qt.MiddleButton) root.refresh()
+      if (buttonCode === Qt.RightButton || buttonCode === Qt.MiddleButton) root.refresh()
       else root.togglePanel()
     }
 
@@ -115,69 +112,53 @@ BarWidget {
       id: chipsRow
       visible: !root.vertical
       anchors.centerIn: parent
-      spacing: Style.space(8)
-
-      Image {
-        width: Style.space(16)
-        height: Style.space(16)
-        anchors.verticalCenter: parent.verticalCenter
-        source: engine.magillaUrl()
-        sourceSize.width: Style.space(32)
-        sourceSize.height: Style.space(32)
-        fillMode: Image.PreserveAspectFit
-        opacity: engine.refreshing ? 0.55 : 1
-        Behavior on opacity { NumberAnimation { duration: 160 } }
-      }
+      spacing: Style.space(10)
 
       Repeater {
         model: root.barProviders
 
         Row {
           required property var modelData
-          spacing: Style.space(4)
+          spacing: Style.space(5)
           anchors.verticalCenter: parent.verticalCenter
 
-          Rectangle {
-            width: Style.space(6)
-            height: Style.space(6)
-            radius: width / 2
-            anchors.verticalCenter: parent.verticalCenter
-            color: Theme.statusHex(modelData.status)
-          }
-
           Image {
-            id: providerMark
-            width: Style.space(12)
-            height: Style.space(12)
+            width: Style.space(13)
+            height: Style.space(13)
             anchors.verticalCenter: parent.verticalCenter
             source: engine.iconUrl(modelData.providerId, root.bar ? root.bar.background : Color.background)
-            sourceSize.width: Style.space(24)
-            sourceSize.height: Style.space(24)
+            sourceSize.width: Style.space(26)
+            sourceSize.height: Style.space(26)
             fillMode: Image.PreserveAspectFit
-            visible: providerMark.status === Image.Ready
           }
 
           Text {
             anchors.verticalCenter: parent.verticalCenter
-            text: Model.barLabel(modelData, root.displayStyle)
-            color: modelData.status === "exhausted" || modelData.status === "low"
-              ? (root.bar ? root.bar.urgent : Color.urgent)
-              : (root.bar ? root.bar.barForeground : Color.foreground)
+            text: {
+              if (root.displayStyle === "remaining") {
+                var left = Model.remainingPercent(modelData)
+                return left < 0 ? "—" : Model.formatPercent(left)
+              }
+              var used = Model.usedPercent(modelData)
+              return used < 0 ? "—" : Model.formatPercent(used)
+            }
+            color: (modelData.status === "exhausted" || modelData.status === "low") ? root.alarm : root.fg
             font.family: root.bar ? root.bar.fontFamily : Style.font.family
             font.pixelSize: Style.font.bodySmall
-            font.bold: true
           }
         }
       }
 
-      Text {
+      Image {
         visible: root.barProviders.length === 0
+        width: Style.space(14)
+        height: Style.space(14)
         anchors.verticalCenter: parent.verticalCenter
-        text: "Magilla"
-        color: root.bar ? root.bar.barForeground : Color.foreground
-        font.family: root.bar ? root.bar.fontFamily : Style.font.family
-        font.pixelSize: Style.font.bodySmall
-        font.bold: true
+        source: engine.magillaUrl()
+        sourceSize.width: Style.space(28)
+        sourceSize.height: Style.space(28)
+        fillMode: Image.PreserveAspectFit
+        opacity: engine.refreshing ? 0.55 : 1
       }
     }
 
@@ -187,28 +168,20 @@ BarWidget {
       anchors.centerIn: parent
       spacing: Style.space(2)
 
-      Image {
-        width: Style.space(16)
-        height: Style.space(16)
-        anchors.horizontalCenter: parent.horizontalCenter
-        source: engine.magillaUrl()
-        sourceSize.width: Style.space(32)
-        sourceSize.height: Style.space(32)
-        fillMode: Image.PreserveAspectFit
-      }
-
       Repeater {
-        model: root.barProviders
+        model: root.barProviders.length > 0 ? root.barProviders : [{ providerId: "", status: "idle" }]
 
-        Text {
+        Image {
           required property var modelData
-          width: parent.width
-          horizontalAlignment: Text.AlignHCenter
-          text: Model.barLabel(modelData, "compact")
-          color: Theme.statusHex(modelData.status)
-          font.family: root.bar ? root.bar.fontFamily : Style.font.family
-          font.pixelSize: Style.font.caption
-          font.bold: true
+          width: Style.space(14)
+          height: Style.space(14)
+          anchors.horizontalCenter: parent.horizontalCenter
+          source: modelData.providerId
+            ? engine.iconUrl(modelData.providerId, root.bar ? root.bar.background : Color.background)
+            : engine.magillaUrl()
+          sourceSize.width: Style.space(28)
+          sourceSize.height: Style.space(28)
+          fillMode: Image.PreserveAspectFit
         }
       }
     }
