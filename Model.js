@@ -244,6 +244,49 @@ function hasUsage(provider) {
   return false
 }
 
+// Main page + bar: signed in and actually reporting quota or live stats.
+function hasLiveData(provider) {
+  if (!provider || provider.authenticated !== true) return false
+  if (usedPercent(provider) >= 0) return true
+  if (provider.balance) return true
+  if (provider.ready === true && hasUsage(provider)) return true
+  return false
+}
+
+function windowKind(limit) {
+  var text = String((limit && (limit.title || limit.label)) || "").toLowerCase()
+  if (text.indexOf("week") >= 0) return "weekly"
+  if (text.indexOf("month") >= 0 || text.indexOf("cursor") >= 0 || text.indexOf("other") >= 0)
+    return "monthly"
+  if (text.indexOf("session") >= 0) return "session"
+  return "limit"
+}
+
+function usedLabel(limit) {
+  var p = Number(limit && limit.percent)
+  if (!isFinite(p) || p < 0) return ""
+  if (p > 1) p = p / 100
+  var kind = windowKind(limit)
+  return Math.round(p * 100) + "% of " + kind + " limit used"
+}
+
+function formatResetsLabel(iso) {
+  var text = String(iso || "").trim()
+  if (text === "") return ""
+  var when = new Date(text)
+  if (!isFinite(when.getTime())) return ""
+  var months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+  var h = when.getHours()
+  var min = when.getMinutes()
+  var ampm = h >= 12 ? "PM" : "AM"
+  var h12 = h % 12
+  if (h12 === 0) h12 = 12
+  var timePart = min > 0
+    ? (h12 + ":" + (min < 10 ? "0" : "") + min + " " + ampm)
+    : (h12 + " " + ampm)
+  return "Resets " + months[when.getMonth()] + " " + when.getDate() + ", " + timePart
+}
+
 function displaySort(a, b) {
   var rank = { exhausted: 0, low: 1, active: 2, waiting: 3, idle: 4 }
   var sa = rank[statusOf(a)] !== undefined ? rank[statusOf(a)] : 9
@@ -261,8 +304,7 @@ function autoBarSlots(providers) {
   var ranked = providers.slice().sort(displaySort)
   for (var i = 0; i < ranked.length; i++) {
     var p = ranked[i]
-    if (!p || !p.enabled) continue
-    if (!p.authenticated && !hasUsage(p)) continue
+    if (!p || !p.enabled || !p.hasLiveData) continue
     picked.push(p.providerId)
     if (picked.length >= 3) break
   }
@@ -365,7 +407,8 @@ function mergeProviders(catalog, records, settings) {
     p.usedPercent = usedPercent(p)
     p.remainingPercent = remainingPercent(p)
     p.headline = bindingLimit(p)
-    p.visibleInPanel = !!(p.enabled && (p.authenticated || hasUsage(p) || (showIdle && p.installed)))
+    p.hasLiveData = hasLiveData(p)
+    p.visibleInPanel = !!(p.enabled && p.hasLiveData)
     if (p.visibleInPanel || p.known) out.push(p)
   }
 
@@ -388,7 +431,7 @@ function resolveBarProviders(all, settings) {
   if (wanted.length > 0) {
     for (var w = 0; w < wanted.length; w++) {
       var hit = byId[wanted[w]]
-      if (hit && hit.enabled) slots.push(hit)
+      if (hit && hit.enabled && hit.hasLiveData) slots.push(hit)
     }
   } else {
     var autoIds = autoBarSlots(enabled)

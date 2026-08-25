@@ -6,7 +6,8 @@ import qs.Commons
 import qs.Ui
 import "Model.js" as Model
 
-// Signed-in usage dashboard. Matches Omarchy Agents: one hero, meters, switch.
+// Stacked usage cards for signed-in providers with live quota.
+// Unsigned installs live in Settings.
 Panel {
   id: root
   moduleName: "io.github.xfurti.magilla-ai-usage"
@@ -22,42 +23,24 @@ Panel {
   readonly property color urgent: bar ? bar.urgent : Color.urgent
   readonly property color dim: Qt.darker(contentForeground, 1.55)
   readonly property color surface: Color.popups.background
-  readonly property string contentFontFamily: bar ? bar.fontFamily : Style.font.family
   readonly property color track: Style.selectedFillFor(contentForeground, Color.accent)
+  readonly property color fill: Color.accent
+  readonly property string contentFontFamily: bar ? bar.fontFamily : Style.font.family
 
   property bool settingsOpen: false
-  property string selectedProviderId: ""
-  property bool cursorActive: false
 
   readonly property var providers: engine ? engine.panelProviders : []
-  readonly property int providerIndex: {
-    for (var i = 0; i < providers.length; i++)
-      if (providers[i].providerId === selectedProviderId) return i
-    return 0
-  }
-  readonly property var provider: providers.length > 0 ? providers[Math.max(0, providerIndex)] : null
-  readonly property var limits: provider ? (provider.limits || []) : []
-  readonly property var models: Model.modelRows(provider)
-  readonly property var headline: provider ? provider.headline : null
-  readonly property bool alarming: !!(headline && headline.percent >= 0.9)
 
   function clamp(v, lo, hi) {
     var n = Number(v)
     if (!isFinite(n)) n = lo
     return Math.max(lo, Math.min(hi, n))
   }
-  function alpha(c, a) { return Qt.rgba(c.r, c.g, c.b, a) }
 
   function limitPercent(entry) {
     var p = Number(entry && entry.percent)
     if (!isFinite(p) || p < 0) return -1
     return p > 1 ? Math.min(1, p / 100) : Math.min(1, p)
-  }
-
-  function meterColor(percent) {
-    if (percent >= 0.9) return root.urgent
-    if (percent >= 0.8) return root.urgent
-    return root.contentForeground
   }
 
   function persistSettings(values) {
@@ -68,12 +51,6 @@ Panel {
     if (root.hostWidget && "settings" in root.hostWidget) root.hostWidget.settings = entry
     if (root.bar && root.bar.shell && typeof root.bar.shell.updateEntryInline === "function")
       root.bar.shell.updateEntryInline(root.moduleName, entry)
-  }
-
-  function selectProvider(index) {
-    if (providers.length === 0) return
-    var wrapped = ((index % providers.length) + providers.length) % providers.length
-    selectedProviderId = providers[wrapped].providerId
   }
 
   function open() {
@@ -112,18 +89,6 @@ Panel {
       root.bar.centerHoverRevealSuppressed = value
   }
 
-  function heroMeta(p) {
-    if (!p) return ""
-    if (String(p.usageStatusText || "") !== "") return p.usageStatusText
-    return String(p.tierLabel || "")
-  }
-
-  onProviderIndexChanged: if (panelFlick) panelFlick.contentY = 0
-  onOpenedChanged: if (opened) {
-    cursorActive = false
-    if (panelFlick) panelFlick.contentY = 0
-  }
-
   KeyboardPanel {
     id: panel
     anchorItem: root.anchorItem
@@ -132,7 +97,7 @@ Panel {
     open: root.opened
     focusTarget: keyCatcher
     contentWidth: panel.fittedContentWidth(Style.space(380))
-    contentHeight: panel.fittedContentHeight(column.implicitHeight, Style.space(560))
+    contentHeight: panel.fittedContentHeight(column.implicitHeight, Style.space(640))
 
     PanelKeyCatcher {
       id: keyCatcher
@@ -148,10 +113,6 @@ Panel {
         else if (t === "s" || t === "S") root.settingsOpen = !root.settingsOpen
       }
       onMoveRequested: function(dx, dy) {
-        if (dx !== 0) {
-          root.cursorActive = true
-          root.selectProvider(root.providerIndex + dx)
-        }
         if (dy !== 0)
           panelFlick.contentY = root.clamp(panelFlick.contentY + dy * Style.space(56), 0,
                                            Math.max(0, panelFlick.contentHeight - panelFlick.height))
@@ -171,107 +132,65 @@ Panel {
         Column {
           id: column
           width: panelFlick.width
-          spacing: Style.space(12)
+          spacing: Style.space(14)
 
-          Row {
-            visible: !root.settingsOpen
+          Item {
             width: parent.width
-            spacing: Style.space(10)
+            implicitHeight: Style.space(28)
 
             Image {
-              width: Style.space(28)
-              height: Style.space(28)
+              visible: !root.settingsOpen
+              width: Style.space(22)
+              height: Style.space(22)
+              anchors.left: parent.left
               anchors.verticalCenter: parent.verticalCenter
               source: engine ? engine.magillaUrl() : ""
-              sourceSize.width: Style.space(56)
-              sourceSize.height: Style.space(56)
+              sourceSize.width: Style.space(44)
+              sourceSize.height: Style.space(44)
               fillMode: Image.PreserveAspectFit
             }
 
-            Column {
+            Text {
+              visible: root.settingsOpen
+              anchors.left: parent.left
               anchors.verticalCenter: parent.verticalCenter
-              spacing: Style.space(1)
-
-              Text {
-                text: "Magilla"
-                color: root.contentForeground
-                font.family: root.contentFontFamily
-                font.pixelSize: Style.font.subtitle
-                font.bold: true
-              }
-
-              Text {
-                text: engine && engine.refreshing ? "Refreshing" : (engine && engine.lastRefreshAt ? Model.formatClock(engine.lastRefreshAt) : "")
-                color: root.dim
-                font.family: root.contentFontFamily
-                font.pixelSize: Style.font.caption
-              }
-            }
-          }
-
-          PanelHero {
-            visible: !root.settingsOpen && !!root.provider
-            width: parent.width
-            title: root.provider ? root.provider.providerName : ""
-            meta: root.heroMeta(root.provider)
-            foreground: root.contentForeground
-            fontFamily: root.contentFontFamily
-
-            iconComponent: Component {
-              Image {
-                width: Style.font.display
-                height: Style.font.display
-                source: engine && root.provider ? engine.iconUrl(root.provider.providerId, root.surface) : ""
-                sourceSize.width: Style.font.display * 2
-                sourceSize.height: Style.font.display * 2
-                fillMode: Image.PreserveAspectFit
-              }
+              text: "Settings"
+              color: root.contentForeground
+              font.family: root.contentFontFamily
+              font.pixelSize: Style.font.title
+              font.bold: true
             }
 
-            trailingControl: Component {
-              Row {
-                spacing: Style.space(2)
+            Row {
+              anchors.right: parent.right
+              anchors.verticalCenter: parent.verticalCenter
+              spacing: Style.space(2)
 
-                PanelActionButton {
-                  iconText: "󰑐"
-                  tooltipText: "Refresh"
-                  foreground: root.contentForeground
-                  fontFamily: root.contentFontFamily
-                  onClicked: root.refresh()
-                }
-
-                PanelActionButton {
-                  iconText: "󰒓"
-                  tooltipText: "Settings"
-                  foreground: root.contentForeground
-                  fontFamily: root.contentFontFamily
-                  onClicked: root.settingsOpen = true
-                }
+              PanelActionButton {
+                visible: root.settingsOpen
+                iconText: "󰅁"
+                tooltipText: "Back"
+                foreground: root.contentForeground
+                fontFamily: root.contentFontFamily
+                onClicked: root.settingsOpen = false
               }
-            }
-          }
 
-          Row {
-            visible: root.settingsOpen
-            width: parent.width
-            spacing: Style.space(8)
+              PanelActionButton {
+                iconText: "󰑐"
+                tooltipText: "Refresh"
+                foreground: root.contentForeground
+                fontFamily: root.contentFontFamily
+                onClicked: root.refresh()
+              }
 
-            Button {
-              text: "Back"
-              bordered: true
-              foreground: root.contentForeground
-              fontFamily: root.contentFontFamily
-              fontSize: Style.font.bodySmall
-              onClicked: root.settingsOpen = false
-            }
-
-            Button {
-              text: engine && engine.refreshing ? "Refreshing…" : "Refresh"
-              bordered: true
-              foreground: root.contentForeground
-              fontFamily: root.contentFontFamily
-              fontSize: Style.font.bodySmall
-              onClicked: root.refresh()
+              PanelActionButton {
+                visible: !root.settingsOpen
+                iconText: "󰒓"
+                tooltipText: "Settings"
+                foreground: root.contentForeground
+                fontFamily: root.contentFontFamily
+                onClicked: root.settingsOpen = true
+              }
             }
           }
 
@@ -289,13 +208,13 @@ Panel {
           Column {
             visible: !root.settingsOpen
             width: parent.width
-            spacing: Style.space(12)
+            spacing: Style.space(16)
 
             Text {
-              visible: !root.provider
+              visible: root.providers.length === 0
               width: parent.width
-              topPadding: Style.space(20)
-              text: "No signed-in coding agents.\nSign in to Grok, Cursor, Claude, or Codex and they will appear here."
+              topPadding: Style.space(16)
+              text: "No signed-in usage yet.\nOpen Settings to see installed tools."
               color: root.dim
               font.family: root.contentFontFamily
               font.pixelSize: Style.font.body
@@ -303,211 +222,15 @@ Panel {
               horizontalAlignment: Text.AlignHCenter
             }
 
-            Row {
-              id: providerSwitch
-              visible: root.providers.length > 1
-              width: parent.width
-              spacing: Style.spacing.md
+            Repeater {
+              model: root.providers
 
-              readonly property real cellWidth: root.providers.length > 0
-                ? (width - spacing * (root.providers.length - 1)) / root.providers.length
-                : 0
-
-              Repeater {
-                model: root.providers
-
-                Button {
-                  required property var modelData
-                  required property int index
-                  width: providerSwitch.cellWidth
-                  text: modelData.shortName
-                  selected: index === root.providerIndex
-                  hasCursor: root.cursorActive && index === root.providerIndex
-                  bordered: true
-                  foreground: root.contentForeground
-                  fontFamily: root.contentFontFamily
-                  fontSize: Style.font.bodySmall
-                  verticalPadding: Style.spacing.controlPaddingY
-                  onClicked: {
-                    root.cursorActive = true
-                    root.selectProvider(index)
-                  }
-                }
-              }
-            }
-
-            BorderSurface {
-              visible: !!root.provider && String(root.provider.authHelpText || "") !== ""
-              width: parent.width
-              implicitHeight: statusText.implicitHeight + Style.spacing.xl * 2
-              color: root.alpha(root.urgent, 0.10)
-              borderSpec: Border.flat(root.alpha(root.urgent, 0.35), 1)
-              radius: Style.cornerRadius
-
-              Text {
-                id: statusText
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.verticalCenter: parent.verticalCenter
-                anchors.leftMargin: Style.space(12)
-                anchors.rightMargin: Style.space(12)
-                text: root.provider ? String(root.provider.authHelpText || "") : ""
-                color: root.dim
-                font.family: root.contentFontFamily
-                font.pixelSize: Style.font.caption
-                wrapMode: Text.WordWrap
-              }
-            }
-
-            Column {
-              visible: root.limits.length > 0
-              width: parent.width
-              spacing: Style.space(10)
-
-              PanelSectionHeader {
-                text: "LIMITS"
-                foreground: root.contentForeground
-                fontFamily: root.contentFontFamily
-              }
-
-              Repeater {
-                model: root.limits
-
-                Column {
-                  required property var modelData
-                  width: parent.width
-                  spacing: Style.space(6)
-
-                  readonly property real pct: root.limitPercent(modelData)
-
-                  Item {
-                    width: parent.width
-                    implicitHeight: Math.max(limitLabel.implicitHeight, limitValue.implicitHeight)
-
-                    Text {
-                      id: limitLabel
-                      text: String(modelData.title || modelData.label || "Limit")
-                      color: root.contentForeground
-                      font.family: root.contentFontFamily
-                      font.pixelSize: Style.font.body
-                      elide: Text.ElideRight
-                      anchors.left: parent.left
-                      anchors.right: limitValue.left
-                      anchors.rightMargin: Style.spacing.sm
-                      anchors.verticalCenter: parent.verticalCenter
-                    }
-
-                    Text {
-                      id: limitValue
-                      text: parent.parent.pct >= 0 ? Math.round(parent.parent.pct * 100) + "%" : "—"
-                      color: root.meterColor(parent.parent.pct)
-                      font.family: root.contentFontFamily
-                      font.pixelSize: Style.font.caption
-                      anchors.right: parent.right
-                      anchors.verticalCenter: parent.verticalCenter
-                    }
-                  }
-
-                  Meter {
-                    width: parent.width
-                    value: parent.pct
-                    fill: root.meterColor(parent.pct)
-                  }
-
-                  Text {
-                    visible: text !== ""
-                    width: parent.width
-                    text: Model.formatReset(modelData.resetsAt, engine ? engine.nowMs : Date.now())
-                    color: root.dim
-                    font.family: root.contentFontFamily
-                    font.pixelSize: Style.font.caption
-                  }
-                }
-              }
-            }
-
-            Text {
-              visible: !!root.provider && root.provider.balance
-              width: parent.width
-              text: {
-                if (!root.provider || !root.provider.balance) return ""
-                var b = root.provider.balance
-                return "Prepaid " + Number(b.remaining).toFixed(2) + " " + String(b.currency || "USD") + " remaining"
-              }
-              color: root.contentForeground
-              font.family: root.contentFontFamily
-              font.pixelSize: Style.font.caption
-            }
-
-            Text {
-              visible: !!root.provider && root.provider.hasLocalStats
-              width: parent.width
-              text: root.provider
-                ? Model.formatTokenCount(root.provider.todayTotalTokens) + " tokens today · "
-                  + root.provider.todayPrompts + " prompts"
-                : ""
-              color: root.dim
-              font.family: root.contentFontFamily
-              font.pixelSize: Style.font.caption
-            }
-
-            Column {
-              visible: root.models.length > 0
-              width: parent.width
-              spacing: Style.spacing.md
-
-              PanelSeparator { foreground: root.contentForeground }
-
-              PanelSectionHeader {
-                text: "MODELS"
-                foreground: root.contentForeground
-                fontFamily: root.contentFontFamily
-              }
-
-              Repeater {
-                model: root.models
-
-                Item {
-                  required property var modelData
-                  width: parent.width
-                  implicitHeight: modelName.implicitHeight + Style.spacing.lg
-
-                  Rectangle {
-                    anchors.fill: parent
-                    radius: Style.cornerRadius
-                    color: root.alpha(root.contentForeground, 0.05)
-                  }
-
-                  Rectangle {
-                    anchors.left: parent.left
-                    anchors.top: parent.top
-                    anchors.bottom: parent.bottom
-                    width: parent.width * root.clamp(modelData.total / Math.max(1, root.models[0].total), 0, 1)
-                    radius: Style.cornerRadius
-                    color: root.alpha(root.contentForeground, 0.14)
-                  }
-
-                  Text {
-                    id: modelName
-                    anchors.left: parent.left
-                    anchors.leftMargin: Style.space(10)
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: modelData.name
-                    color: root.contentForeground
-                    font.family: root.contentFontFamily
-                    font.pixelSize: Style.font.caption
-                  }
-
-                  Text {
-                    anchors.right: parent.right
-                    anchors.rightMargin: Style.space(10)
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: Model.formatTokenCount(modelData.total)
-                    color: root.dim
-                    font.family: root.contentFontFamily
-                    font.pixelSize: Style.font.caption
-                  }
-                }
+              ProviderCard {
+                required property var modelData
+                required property int index
+                width: column.width
+                provider: modelData
+                showDivider: index > 0
               }
             }
           }
@@ -516,12 +239,123 @@ Panel {
     }
   }
 
+  component ProviderCard: Column {
+    id: card
+    property var provider: null
+    property bool showDivider: false
+    spacing: Style.space(12)
+
+    readonly property var limits: provider && provider.limits ? provider.limits : []
+    readonly property string planName: {
+      if (!provider) return ""
+      if (provider.tierLabel) return provider.tierLabel
+      return provider.providerName || ""
+    }
+
+    PanelSeparator {
+      visible: card.showDivider
+      foreground: root.contentForeground
+    }
+
+    Item {
+      width: parent.width
+      implicitHeight: Math.max(planIcon.height, planTitle.implicitHeight)
+
+      Image {
+        id: planIcon
+        width: Style.font.display
+        height: planTitle.height
+        anchors.left: parent.left
+        anchors.top: parent.top
+        source: engine && card.provider ? engine.iconUrl(card.provider.providerId, root.surface) : ""
+        sourceSize.width: Style.font.display * 2
+        sourceSize.height: Style.font.display * 2
+        fillMode: Image.PreserveAspectFit
+      }
+
+      Text {
+        id: planTitle
+        anchors.left: planIcon.right
+        anchors.leftMargin: Style.space(14)
+        anchors.right: parent.right
+        anchors.verticalCenter: planIcon.verticalCenter
+        text: card.planName
+        textFormat: Text.PlainText
+        color: root.contentForeground
+        font.family: root.contentFontFamily
+        font.pixelSize: Style.font.title
+        font.bold: true
+        elide: Text.ElideRight
+      }
+    }
+
+    Repeater {
+      model: card.limits
+
+      Column {
+        required property var modelData
+        required property int index
+        width: card.width
+        spacing: Style.space(6)
+
+        readonly property real pct: root.limitPercent(modelData)
+        readonly property bool hot: pct >= 0.9
+
+        Item {
+          width: parent.width
+          implicitHeight: Math.max(usedText.implicitHeight, resetText.implicitHeight)
+
+          Text {
+            id: usedText
+            width: parent.width - (resetText.visible ? resetText.implicitWidth + Style.space(10) : 0)
+            text: Model.usedLabel(modelData)
+            color: parent.parent.hot ? root.urgent : root.contentForeground
+            font.family: root.contentFontFamily
+            font.pixelSize: Style.font.body
+            elide: Text.ElideRight
+            anchors.left: parent.left
+            anchors.verticalCenter: parent.verticalCenter
+          }
+
+          Text {
+            id: resetText
+            visible: index === 0 && text !== ""
+            text: Model.formatResetsLabel(modelData.resetsAt)
+            color: root.dim
+            font.family: root.contentFontFamily
+            font.pixelSize: Style.font.caption
+            elide: Text.ElideLeft
+            horizontalAlignment: Text.AlignRight
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+          }
+        }
+
+        Meter {
+          width: parent.width
+          value: parent.pct
+          fill: parent.hot ? root.urgent : root.fill
+        }
+      }
+    }
+
+    Text {
+      visible: card.provider && card.provider.hasLocalStats && Number(card.provider.todayTotalTokens) > 0
+      width: parent.width
+      text: card.provider
+        ? Model.formatTokenCount(card.provider.todayTotalTokens) + " tokens today"
+        : ""
+      color: root.dim
+      font.family: root.contentFontFamily
+      font.pixelSize: Style.font.caption
+    }
+  }
+
   component Meter: Item {
     id: meter
     property real value: -1
-    property color fill: root.contentForeground
-    property real thickness: Math.max(Style.space(4), Math.round(Style.spacing.controlHeight * 0.14))
-    implicitHeight: thickness
+    property color fill: root.fill
+    implicitHeight: Math.max(Style.space(6), Math.round(Style.spacing.controlHeight * 0.18))
 
     Rectangle {
       id: meterTrack
