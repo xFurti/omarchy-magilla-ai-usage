@@ -1,0 +1,20 @@
+# QML / Python caches
+*.qmlc
+*.jsc
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Editors and OS
+*~
+*.swp
+*.swo
+.DS_Store
+.idea/
+.vscode/
+*.code-workspace
+
+# Local collector caches (never commit usage or tokens)
+.cache/
+*.local.json
