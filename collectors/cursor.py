@@ -7,7 +7,6 @@ uses for included Ultra / plan usage.
 
 from __future__ import annotations
 
-import json
 import os
 import sqlite3
 import urllib.error
@@ -85,7 +84,7 @@ def _dashboard_post(url: str, token: str) -> dict[str, Any]:
   )
   try:
     with urllib.request.urlopen(request, timeout=15) as response:
-      payload = json.loads(response.read().decode("utf-8", errors="replace"))
+      payload = lib.read_http_json(response)
   except urllib.error.HTTPError as error:
     if error.code in (401, 403):
       return {"ok": False, "auth": True, "helpText": "Cursor rejected the saved sign-in. Open Cursor and sign in."}

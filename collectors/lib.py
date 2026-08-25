@@ -15,6 +15,33 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
+# Hard cap for authenticated HTTP JSON (billing/plan payloads are tiny).
+MAX_HTTP_JSON_BYTES = 1_048_576
+_HTTP_READ_CHUNK = 65_536
+
+
+def read_http_json(response: Any, max_bytes: int = MAX_HTTP_JSON_BYTES) -> Any:
+  """Decode a JSON HTTP body without letting it grow without bound."""
+  length = response.headers.get("Content-Length") if getattr(response, "headers", None) else None
+  if length is not None:
+    try:
+      declared = int(length)
+    except ValueError:
+      declared = -1
+    if declared > max_bytes:
+      raise ValueError("HTTP Content-Length exceeds Magilla's JSON body limit")
+  chunks: list[bytes] = []
+  total = 0
+  while True:
+    chunk = response.read(min(_HTTP_READ_CHUNK, max(1, max_bytes - total + 1)))
+    if not chunk:
+      break
+    total += len(chunk)
+    if total > max_bytes:
+      raise ValueError("HTTP response exceeded Magilla's JSON body limit")
+    chunks.append(chunk)
+  return json.loads(b"".join(chunks).decode("utf-8", errors="replace"))
+
 
 def home() -> Path:
   raw = os.environ.get("HOME")

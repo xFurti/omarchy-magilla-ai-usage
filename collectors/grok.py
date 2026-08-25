@@ -214,7 +214,7 @@ def _fetch_tier(access_token: str, user_id: str) -> str:
   request = urllib.request.Request(SETTINGS_URL, headers=_auth_headers(access_token, user_id))
   try:
     with urllib.request.urlopen(request, timeout=10) as response:
-      payload = json.loads(response.read().decode("utf-8", errors="replace"))
+      payload = lib.read_http_json(response)
   except Exception:
     return ""
   if not isinstance(payload, dict):
@@ -230,7 +230,7 @@ def _probe_billing(access_token: str, user_id: str) -> dict[str, Any]:
   request = urllib.request.Request(BILLING_URL, headers=_auth_headers(access_token, user_id))
   try:
     with urllib.request.urlopen(request, timeout=15) as response:
-      payload = json.loads(response.read().decode("utf-8", errors="replace"))
+      payload = lib.read_http_json(response)
   except urllib.error.HTTPError as error:
     if error.code in (401, 403):
       return {"ok": False, "auth": True, "helpText": "Grok rejected the saved sign-in. Run `grok login`."}
