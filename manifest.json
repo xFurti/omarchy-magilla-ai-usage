@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.xfurti.magilla-ai-usage",
+  "name": "Magilla AI Usage",
+  "version": "0.1.0",
+  "author": "Leonardo Bassanello (xFurti)",
+  "license": "MIT",
+  "description": "Magilla-themed Omarchy bar widget that detects AI coding tools and shows subscription usage, remaining quota, and reset countdowns in one place.",
+  "homepage": "https://github.com/xFurti/omarchy-magilla-ai-usage",
+  "kinds": ["bar-widget"],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Magilla AI Usage",
+    "description": "Detect Grok, Cursor, Claude Code, Codex, OpenCode and friends. Pin 1–3 providers on the bar, open a Magilla panel for the rest.",
+    "category": "AI",
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "barSlots": "",
+      "displayStyle": "percent",
+      "refreshIntervalSec": 300,
+      "showIdleProviders": true,
+      "providers": {}
+    },
+    "schema": [
+      {
+        "key": "barSlots",
+        "type": "string",
+        "label": "Bar providers (comma-separated, max 3)",
+        "defaultValue": "",
+        "description": "Provider ids to show on the bar, for example grok,cursor,claude. Leave empty to auto-pick."
+      },
+      {
+        "key": "displayStyle",
+        "type": "enum",
+        "label": "Bar display style",
+        "options": ["percent", "remaining", "compact"],
+        "defaultValue": "percent",
+        "description": "percent = used quota, remaining = leftover quota, compact = colored numbers only."
+      },
+      {
+        "key": "refreshIntervalSec",
+        "type": "integer",
+        "label": "Refresh interval (seconds)",
+        "min": 30,
+        "max": 3600,
+        "step": 30,
+        "defaultValue": 300
+      },
+      {
+        "key": "showIdleProviders",
+        "type": "enum",
+        "label": "Show detected tools without usage yet",
+        "options": ["On", "Off"],
+        "defaultValue": "On"
+      }
+    ]
+  }
+}
