@@ -185,7 +185,7 @@ Item {
       if (kind === "force" || root.pendingKind === "") root.pendingKind = kind
       return
     }
-    var command = ["python3", root.updaterPath]
+    var command = ["timeout", "--kill-after=2s", "45s", "python3", root.updaterPath]
     if (kind === "force") command.push("--force")
     if (kind === "limits") command.push("--limits-only")
     updateProcess.command = command

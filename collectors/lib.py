@@ -12,18 +12,25 @@ import os
 import re
 import shutil
 import tempfile
+import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 # Hard cap for authenticated HTTP JSON (billing/plan payloads are tiny).
 MAX_HTTP_JSON_BYTES = 1_048_576
-_HTTP_READ_CHUNK = 65_536
+_HTTP_READ_CHUNK = 16_384
 _DEFAULT_HTTP_TIMEOUT = 15.0
 _SAFE_DISPLAY = re.compile(r"[^\w\s.+/\-()]+", re.UNICODE)
+ALLOWED_HTTP_HOSTS = frozenset({
+  "api2.cursor.sh",
+  "cli-chat-proxy.grok.com",
+  "opencode.ai",
+})
 
 
 class _RefuseRedirect(urllib.request.HTTPRedirectHandler):
@@ -39,7 +46,8 @@ class _RefuseRedirect(urllib.request.HTTPRedirectHandler):
     )
 
 
-_http_opener = urllib.request.build_opener(_RefuseRedirect)
+# Ignore HTTP(S)_PROXY so a poisoned environment cannot intercept Bearer tokens.
+_http_opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), _RefuseRedirect)
 
 
 def safe_display_text(value: Any, max_len: int = 64) -> str:
@@ -49,6 +57,102 @@ def safe_display_text(value: Any, max_len: int = 64) -> str:
   if len(text) > max_len:
     text = text[:max_len].rstrip()
   return text
+
+
+def require_https_host(url: str, allowed: frozenset[str] = ALLOWED_HTTP_HOSTS) -> str:
+  parsed = urllib.parse.urlparse(url)
+  host = (parsed.hostname or "").lower()
+  if parsed.scheme != "https" or parsed.username or parsed.password:
+    raise ValueError("Magilla only allows https URLs without credentials in the URL")
+  if parsed.port not in (None, 443):
+    raise ValueError("Magilla only allows https port 443")
+  if host not in allowed:
+    raise ValueError("Magilla refused a host outside the provider allow-list")
+  return url
+
+
+def _deadline_remaining(deadline: float) -> float:
+  left = deadline - time.monotonic()
+  if left <= 0:
+    raise TimeoutError("HTTP call exceeded Magilla deadline")
+  return left
+
+
+def _walk_fileobjs(obj: Any) -> Iterator[Any]:
+  seen: set[int] = set()
+  stack = [obj]
+  while stack:
+    cur = stack.pop()
+    ident = id(cur)
+    if ident in seen or cur is None or isinstance(cur, (bytes, str, int, float, bool)):
+      continue
+    seen.add(ident)
+    yield cur
+    for name in ("fp", "raw", "_fp", "rfile"):
+      inner = getattr(cur, name, None)
+      if inner is not None:
+        stack.append(inner)
+
+
+def _set_read_timeout(response: Any, seconds: float) -> None:
+  for obj in _walk_fileobjs(response):
+    sock = getattr(obj, "_sock", None)
+    setter = getattr(sock, "settimeout", None) if sock is not None else None
+    if callable(setter):
+      try:
+        setter(seconds)
+      except (OSError, AttributeError, ValueError):
+        continue
+
+
+def _close_quietly(obj: Any) -> None:
+  closer = getattr(obj, "close", None)
+  if callable(closer):
+    try:
+      closer()
+    except Exception:
+      pass
+  for nested in _walk_fileobjs(obj):
+    sock = getattr(nested, "_sock", None)
+    if sock is None:
+      continue
+    try:
+      sock.shutdown(2)
+    except Exception:
+      pass
+    try:
+      sock.close()
+    except Exception:
+      pass
+
+
+class _DeadlineWatchdog:
+  """Close the HTTP response when the whole-call deadline elapses."""
+
+  def __init__(self, deadline: float) -> None:
+    self._deadline = deadline
+    self._stop = threading.Event()
+    self._lock = threading.Lock()
+    self._targets: list[Any] = []
+    self._thread = threading.Thread(target=self._run, name="magilla-http-deadline", daemon=True)
+    self._thread.start()
+
+  def watch(self, obj: Any) -> None:
+    with self._lock:
+      self._targets.append(obj)
+
+  def _run(self) -> None:
+    while not self._stop.wait(0.05):
+      if time.monotonic() < self._deadline:
+        continue
+      with self._lock:
+        targets = list(self._targets)
+      for obj in targets:
+        _close_quietly(obj)
+      return
+
+  def cancel(self) -> None:
+    self._stop.set()
 
 
 def read_http_json(
@@ -68,9 +172,17 @@ def read_http_json(
   chunks: list[bytes] = []
   total = 0
   while True:
-    if deadline is not None and time.monotonic() >= deadline:
-      raise TimeoutError("HTTP JSON read exceeded Magilla deadline")
-    chunk = response.read(min(_HTTP_READ_CHUNK, max(1, max_bytes - total + 1)))
+    left = _deadline_remaining(deadline) if deadline is not None else _DEFAULT_HTTP_TIMEOUT
+    _set_read_timeout(response, left)
+    to_read = min(_HTTP_READ_CHUNK, max(1, max_bytes - total + 1))
+    try:
+      chunk = response.read(to_read)
+    except TimeoutError as exc:
+      raise TimeoutError("HTTP JSON read exceeded Magilla deadline") from exc
+    except OSError as exc:
+      if deadline is not None and time.monotonic() >= deadline:
+        raise TimeoutError("HTTP JSON read exceeded Magilla deadline") from exc
+      raise
     if not chunk:
       break
     total += len(chunk)
@@ -88,8 +200,24 @@ def open_http_json(
   """GET/POST JSON with no redirects, a whole-call deadline, and a body cap."""
   timeout = max(0.2, float(timeout))
   deadline = time.monotonic() + timeout
-  with _http_opener.open(request, timeout=timeout) as response:
+  require_https_host(request.full_url)
+  watchdog = _DeadlineWatchdog(deadline)
+  response = None
+  try:
+    remaining = _deadline_remaining(deadline)
+    try:
+      response = _http_opener.open(request, timeout=remaining)
+    except urllib.error.HTTPError as error:
+      watchdog.watch(error)
+      _close_quietly(error)
+      raise
+    watchdog.watch(response)
+    _set_read_timeout(response, _deadline_remaining(deadline))
     return read_http_json(response, max_bytes=max_bytes, deadline=deadline)
+  finally:
+    watchdog.cancel()
+    if response is not None:
+      _close_quietly(response)
 
 
 def home() -> Path:

@@ -32,6 +32,9 @@ def _collector_path(agent_id: str) -> Path | None:
   return None
 
 
+_MAX_STDOUT = 262_144
+
+
 def _run_collector(path: Path, force: bool, limits_only: bool) -> dict[str, Any] | None:
   command = [str(path)]
   if force:
@@ -39,20 +42,29 @@ def _run_collector(path: Path, force: bool, limits_only: bool) -> dict[str, Any]
   if limits_only:
     command.append("--limits-only")
   try:
-    completed = subprocess.run(
+    proc = subprocess.Popen(
       command,
-      check=False,
-      capture_output=True,
-      text=True,
-      timeout=90,
+      stdout=subprocess.PIPE,
+      stderr=subprocess.DEVNULL,
     )
-  except (OSError, subprocess.TimeoutExpired):
+  except OSError:
     return None
-  if completed.returncode != 0 or not completed.stdout.strip():
+  try:
+    stdout, _stderr = proc.communicate(timeout=20)
+  except subprocess.TimeoutExpired:
+    proc.kill()
+    try:
+      proc.communicate(timeout=2)
+    except Exception:
+      pass
+    return None
+  if proc.returncode != 0 or not stdout:
+    return None
+  if len(stdout) > _MAX_STDOUT:
     return None
   try:
     import json
-    payload = json.loads(completed.stdout)
+    payload = json.loads(stdout.decode("utf-8", errors="replace"))
   except json.JSONDecodeError:
     return None
   return payload if isinstance(payload, dict) else None
