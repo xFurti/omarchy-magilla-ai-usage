@@ -10,23 +10,25 @@ Purple derby, banana yellow, soft pink — playful enough to spot on the bar, qu
 
 ## Features
 
-- **Bar widget** — 1, 2, or 3 pinned providers with status color and percent remaining / used
-- **Full panel** — Magilla-branded overview cards, every detected provider, pin/unpin, and settings
-- **Smart detection** — finds installed and signed-in tools from common config dirs, CLIs, and env vars
-- **Usage records** — reuses Omarchy's Claude / Codex / Fireworks collectors, plus Magilla collectors for Grok, Cursor, OpenCode, Gemini, Copilot, Crush, and Pi
-- **Keyboard** — `Esc` closes (or leaves settings), `R` refreshes, `S` opens settings, `Tab` walks neighboring bar panels
-- Light and dark Omarchy themes still apply; Magilla purple stays on the chrome
-- Official provider marks (Grok, Cursor, Claude, Codex, OpenCode, Gemini, Copilot, Crush, Pi, Fireworks) plus a generated Magilla mascot
+- **Bar** — up to three signed-in providers, official icons and percent used
+- **Panel** — stacked usage cards (plan, leftover, reset, pace) for accounts with live quota
+- **Settings** — pin to the bar; installed tools without a login stay here until you sign in
+- **Detection** — Grok, Cursor, Claude Code, Codex, OpenCode, Gemini, Copilot, Crush, Pi, Fireworks
+- **Keyboard** — `Esc` closes, `R` refreshes, `S` settings, `Tab` neighboring panel
 
 ## Screenshots
 
-Add captures here after you install it (the live bar and panel are the real preview):
+<p align="center">
+  <img src="docs/bar.png" alt="Magilla on the Omarchy bar">
+</p>
 
-```
-docs/bar.png       # Magilla chip on the Omarchy bar
-docs/panel.png     # overview cards + provider list
-docs/settings.png  # pin, reorder, display style
-```
+<p align="center">
+  <img src="docs/panel.png" alt="Magilla Usage panel" width="380">
+</p>
+
+<p align="center">
+  <img src="docs/settings.png" alt="Magilla settings" width="380">
+</p>
 
 ## Install
 
@@ -46,14 +48,21 @@ Magilla can sit next to Omarchy's built-in Agents widget. If you only want one u
 omarchy plugin disable omarchy.agents
 ```
 
+## Remove
+
+```bash
+omarchy plugin remove io.github.xfurti.magilla-ai-usage
+```
+
+That disables Magilla, then deletes the git checkout under `~/.config/omarchy/plugins/`. Optional leftover caches (no secrets) live in `~/.local/state/magilla-ai-usage/` and `~/.cache/magilla-ai-usage/` — delete those by hand if you want a clean uninstall.
+
 ## How to choose which providers appear in the bar
 
-Left-click the Magilla chip, then **Magilla Settings**.
+Left-click the chip, then the gear.
 
-1. Enable or disable each detected tool
-2. **Pin to bar** up to three providers
-3. Reorder pinned tools with the chevrons
-4. Pick a display style:
+1. Enable or disable each signed-in tool
+2. Pin up to three providers to the bar
+3. Pick a display style:
    - `percent` — used quota (`Grok 32%`)
    - `remaining` — leftover quota (`Grok 68%`)
    - `compact` — numbers only
