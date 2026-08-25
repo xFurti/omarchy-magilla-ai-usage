@@ -1,0 +1,91 @@
+#!/usr/bin/python3
+"""Regenerate Magilla detection + usage records.
+
+Writes:
+  ~/.local/state/magilla-ai-usage/detected.json
+  ~/.local/state/magilla-ai-usage/usage/<id>.json
+
+Official Omarchy collectors (claude, codex, fireworks) are preferred when
+present. Magilla never stores credentials.
+"""
+
+from __future__ import annotations
+
+import argparse
+import os
+import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+if str(HERE) not in sys.path:
+  sys.path.insert(0, str(HERE))
+
+import cursor as cursor_mod  # noqa: E402
+import detect  # noqa: E402
+import grok as grok_mod  # noqa: E402
+import lib  # noqa: E402
+import local as local_mod  # noqa: E402
+import official  # noqa: E402
+import opencode as opencode_mod  # noqa: E402
+
+
+COLLECTORS = {
+  "grok": grok_mod.collect,
+  "cursor": cursor_mod.collect,
+  "opencode": opencode_mod.collect,
+  "gemini": local_mod.collect_gemini,
+  "copilot": local_mod.collect_copilot,
+  "crush": local_mod.collect_crush,
+  "pi": local_mod.collect_pi,
+}
+
+
+def _collect_one(agent_id: str, force: bool, limits_only: bool) -> tuple[str, dict]:
+  if agent_id in ("claude", "codex", "fireworks"):
+    name = dict(official.OFFICIAL_AGENTS)[agent_id]
+    return agent_id, official.collect_official(agent_id, name, force, limits_only)
+  collector = COLLECTORS[agent_id]
+  return agent_id, collector(force=force, limits_only=limits_only)
+
+
+def main() -> int:
+  parser = argparse.ArgumentParser(description="Refresh Magilla AI usage records")
+  parser.add_argument("--force", action="store_true", help="ignore short-lived caches")
+  parser.add_argument("--limits-only", action="store_true", help="skip walking local session files when possible")
+  parser.add_argument("--detect-only", action="store_true", help="write detection catalog and exit")
+  parser.add_argument("--json", action="store_true", help="print the detection catalog to stdout")
+  args = parser.parse_args()
+
+  catalog = detect.scan()
+  lib.write_json(lib.magilla_state() / "detected.json", catalog, mode=0o644)
+  if args.json or args.detect_only:
+    print(lib.dump_record(catalog))
+    if args.detect_only:
+      return 0
+
+  wanted = [item["id"] for item in catalog["providers"] if item.get("detected") or item["id"] in COLLECTORS or item["id"] in ("claude", "codex", "fireworks")]
+  # Always try Magilla collectors for known tools, even if detection was shy.
+  for extra in list(COLLECTORS) + ["claude", "codex", "fireworks"]:
+    if extra not in wanted:
+      wanted.append(extra)
+
+  errors = 0
+  with ThreadPoolExecutor(max_workers=min(6, len(wanted) or 1)) as pool:
+    futures = [pool.submit(_collect_one, agent_id, args.force, args.limits_only) for agent_id in wanted]
+    for future in as_completed(futures):
+      try:
+        agent_id, record = future.result()
+      except Exception as exc:
+        print(f"magilla-usage-update: collector failed: {exc}", file=sys.stderr)
+        errors += 1
+        continue
+      if not isinstance(record, dict) or not record.get("id"):
+        continue
+      lib.write_usage_record(record)
+
+  return 1 if errors else 0
+
+
+if __name__ == "__main__":
+  raise SystemExit(main())
