@@ -270,6 +270,32 @@ function usedLabel(limit) {
   return Math.round(p * 100) + "% of " + kind + " limit used"
 }
 
+function expectedPace(limit, nowMs) {
+  if (!limit) return -1
+  var end = new Date(String(limit.resetsAt || "")).getTime()
+  if (!isFinite(end) || end <= 0) return -1
+  var start = new Date(String(limit.startsAt || "")).getTime()
+  var kind = windowKind(limit)
+  if (!isFinite(start) || start >= end) {
+    if (kind === "weekly") start = end - 7 * 24 * 3600 * 1000
+    else if (kind === "monthly") start = end - 30 * 24 * 3600 * 1000
+    else return -1
+  }
+  var now = Number(nowMs)
+  if (!isFinite(now)) now = Date.now()
+  var frac = (now - start) / (end - start)
+  if (!isFinite(frac)) return -1
+  return Math.max(0, Math.min(1, frac))
+}
+
+function remainingLabel(limit) {
+  var p = Number(limit && limit.percent)
+  if (!isFinite(p) || p < 0) return ""
+  if (p > 1) p = p / 100
+  var left = Math.max(0, 1 - p)
+  return Math.round(left * 100) + "% left"
+}
+
 function formatResetsLabel(iso) {
   var text = String(iso || "").trim()
   if (text === "") return ""

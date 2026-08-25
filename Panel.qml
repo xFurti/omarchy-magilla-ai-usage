@@ -5,9 +5,9 @@ import Quickshell.Io
 import qs.Commons
 import qs.Ui
 import "Model.js" as Model
+import "Theme.js" as Theme
 
 // Stacked usage cards for signed-in providers with live quota.
-// Unsigned installs live in Settings.
 Panel {
   id: root
   moduleName: "io.github.xfurti.magilla-ai-usage"
@@ -24,12 +24,12 @@ Panel {
   readonly property color dim: Qt.darker(contentForeground, 1.55)
   readonly property color surface: Color.popups.background
   readonly property color track: Style.selectedFillFor(contentForeground, Color.accent)
-  readonly property color fill: Color.accent
+  readonly property color magilla: Style.colorFromHex(Theme.purple, Color.accent)
   readonly property string contentFontFamily: bar ? bar.fontFamily : Style.font.family
 
   property bool settingsOpen: false
-
   readonly property var providers: engine ? engine.panelProviders : []
+  readonly property double nowMs: engine ? engine.nowMs : Date.now()
 
   function clamp(v, lo, hi) {
     var n = Number(v)
@@ -96,8 +96,8 @@ Panel {
     bar: root.bar
     open: root.opened
     focusTarget: keyCatcher
-    contentWidth: panel.fittedContentWidth(Style.space(380))
-    contentHeight: panel.fittedContentHeight(column.implicitHeight, Style.space(640))
+    contentWidth: panel.fittedContentWidth(Style.space(400))
+    contentHeight: panel.fittedContentHeight(column.implicitHeight, Style.space(660))
 
     PanelKeyCatcher {
       id: keyCatcher
@@ -136,25 +136,26 @@ Panel {
 
           Item {
             width: parent.width
-            implicitHeight: Style.space(28)
+            implicitHeight: Math.max(brandMark.height, brandTitle.implicitHeight, brandActions.height)
 
             Image {
-              visible: !root.settingsOpen
-              width: Style.space(22)
-              height: Style.space(22)
+              id: brandMark
+              width: Style.space(32)
+              height: Style.space(32)
               anchors.left: parent.left
               anchors.verticalCenter: parent.verticalCenter
               source: engine ? engine.magillaUrl() : ""
-              sourceSize.width: Style.space(44)
-              sourceSize.height: Style.space(44)
+              sourceSize.width: Style.space(64)
+              sourceSize.height: Style.space(64)
               fillMode: Image.PreserveAspectFit
             }
 
             Text {
-              visible: root.settingsOpen
-              anchors.left: parent.left
+              id: brandTitle
+              anchors.left: brandMark.right
+              anchors.leftMargin: Style.space(10)
               anchors.verticalCenter: parent.verticalCenter
-              text: "Settings"
+              text: root.settingsOpen ? "Settings" : "Magilla Usage"
               color: root.contentForeground
               font.family: root.contentFontFamily
               font.pixelSize: Style.font.title
@@ -162,6 +163,7 @@ Panel {
             }
 
             Row {
+              id: brandActions
               anchors.right: parent.right
               anchors.verticalCenter: parent.verticalCenter
               spacing: Style.space(2)
@@ -208,12 +210,12 @@ Panel {
           Column {
             visible: !root.settingsOpen
             width: parent.width
-            spacing: Style.space(16)
+            spacing: Style.space(12)
 
             Text {
               visible: root.providers.length === 0
               width: parent.width
-              topPadding: Style.space(16)
+              topPadding: Style.space(12)
               text: "No signed-in usage yet.\nOpen Settings to see installed tools."
               color: root.dim
               font.family: root.contentFontFamily
@@ -227,10 +229,8 @@ Panel {
 
               ProviderCard {
                 required property var modelData
-                required property int index
                 width: column.width
                 provider: modelData
-                showDivider: index > 0
               }
             }
           }
@@ -239,129 +239,234 @@ Panel {
     }
   }
 
-  component ProviderCard: Column {
+  component ProviderCard: BorderSurface {
     id: card
     property var provider: null
-    property bool showDivider: false
-    spacing: Style.space(12)
 
     readonly property var limits: provider && provider.limits ? provider.limits : []
+    readonly property var primary: limits.length > 0 ? limits[0] : null
+    readonly property real primaryPct: root.limitPercent(primary)
+    readonly property real pace: Model.expectedPace(primary, root.nowMs)
+    readonly property bool hot: primaryPct >= 0.9 || (pace >= 0 && primaryPct > pace + 0.02)
+    readonly property color barFill: hot ? root.urgent : root.magilla
     readonly property string planName: {
       if (!provider) return ""
       if (provider.tierLabel) return provider.tierLabel
       return provider.providerName || ""
     }
 
-    PanelSeparator {
-      visible: card.showDivider
-      foreground: root.contentForeground
-    }
+    width: parent ? parent.width : implicitWidth
+    implicitHeight: inner.implicitHeight + Style.space(24)
+    radius: Math.max(Style.cornerRadius, 10)
+    color: Qt.rgba(root.contentForeground.r, root.contentForeground.g, root.contentForeground.b, 0.04)
+    borderSpec: Border.flat(Qt.rgba(root.magilla.r, root.magilla.g, root.magilla.b, 0.22), 1)
 
-    Item {
-      width: parent.width
-      implicitHeight: Math.max(planIcon.height, planTitle.implicitHeight)
+    Column {
+      id: inner
+      anchors.left: parent.left
+      anchors.right: parent.right
+      anchors.top: parent.top
+      anchors.margins: Style.space(14)
+      spacing: Style.space(10)
 
-      Image {
-        id: planIcon
-        width: Style.font.display
-        height: planTitle.height
-        anchors.left: parent.left
-        anchors.top: parent.top
-        source: engine && card.provider ? engine.iconUrl(card.provider.providerId, root.surface) : ""
-        sourceSize.width: Style.font.display * 2
-        sourceSize.height: Style.font.display * 2
-        fillMode: Image.PreserveAspectFit
-      }
+      Item {
+        width: parent.width
+        implicitHeight: Math.max(planIcon.height, planTitle.implicitHeight, planMeta.implicitHeight)
 
-      Text {
-        id: planTitle
-        anchors.left: planIcon.right
-        anchors.leftMargin: Style.space(14)
-        anchors.right: parent.right
-        anchors.verticalCenter: planIcon.verticalCenter
-        text: card.planName
-        textFormat: Text.PlainText
-        color: root.contentForeground
-        font.family: root.contentFontFamily
-        font.pixelSize: Style.font.title
-        font.bold: true
-        elide: Text.ElideRight
-      }
-    }
+        Image {
+          id: planIcon
+          width: Style.font.heading
+          height: Style.font.heading
+          anchors.left: parent.left
+          anchors.verticalCenter: parent.verticalCenter
+          source: engine && card.provider ? engine.iconUrl(card.provider.providerId, root.surface) : ""
+          sourceSize.width: Style.font.heading * 2
+          sourceSize.height: Style.font.heading * 2
+          fillMode: Image.PreserveAspectFit
+        }
 
-    Repeater {
-      model: card.limits
-
-      Column {
-        required property var modelData
-        required property int index
-        width: card.width
-        spacing: Style.space(6)
-
-        readonly property real pct: root.limitPercent(modelData)
-        readonly property bool hot: pct >= 0.9
-
-        Item {
-          width: parent.width
-          implicitHeight: Math.max(usedText.implicitHeight, resetText.implicitHeight)
+        Column {
+          anchors.left: planIcon.right
+          anchors.leftMargin: Style.space(10)
+          anchors.right: parent.right
+          anchors.verticalCenter: parent.verticalCenter
+          spacing: Style.space(1)
 
           Text {
-            id: usedText
-            width: parent.width - (resetText.visible ? resetText.implicitWidth + Style.space(10) : 0)
-            text: Model.usedLabel(modelData)
-            color: parent.parent.hot ? root.urgent : root.contentForeground
+            id: planTitle
+            width: parent.width
+            text: card.planName
+            textFormat: Text.PlainText
+            color: root.contentForeground
             font.family: root.contentFontFamily
-            font.pixelSize: Style.font.body
+            font.pixelSize: Style.font.title
+            font.bold: true
             elide: Text.ElideRight
-            anchors.left: parent.left
-            anchors.verticalCenter: parent.verticalCenter
           }
 
           Text {
-            id: resetText
-            visible: index === 0 && text !== ""
-            text: Model.formatResetsLabel(modelData.resetsAt)
+            id: planMeta
+            visible: card.provider && card.provider.providerName && card.provider.tierLabel
+            width: parent.width
+            text: card.provider ? card.provider.providerName : ""
             color: root.dim
             font.family: root.contentFontFamily
             font.pixelSize: Style.font.caption
-            elide: Text.ElideLeft
-            horizontalAlignment: Text.AlignRight
-            anchors.right: parent.right
-            anchors.verticalCenter: parent.verticalCenter
+            elide: Text.ElideRight
+          }
+        }
+      }
+
+      Item {
+        visible: card.primaryPct >= 0
+        width: parent.width
+        implicitHeight: Math.max(pctNum.implicitHeight, resetCol.implicitHeight)
+
+        Text {
+          id: pctNum
+          text: Math.round(card.primaryPct * 100) + "%"
+          color: card.hot ? root.urgent : root.contentForeground
+          font.family: root.contentFontFamily
+          font.pixelSize: Style.font.display
+          font.bold: true
+          anchors.left: parent.left
+          anchors.verticalCenter: parent.verticalCenter
+        }
+
+        Column {
+          anchors.left: pctNum.right
+          anchors.leftMargin: Style.space(10)
+          anchors.verticalCenter: pctNum.verticalCenter
+          spacing: Style.space(1)
+
+          Text {
+            text: {
+              var kind = Model.windowKind(card.primary)
+              return "of " + kind + " limit"
+            }
+            color: root.dim
+            font.family: root.contentFontFamily
+            font.pixelSize: Style.font.caption
+          }
+
+          Text {
+            visible: text !== ""
+            text: Model.remainingLabel(card.primary)
+            color: card.hot ? root.urgent : root.magilla
+            font.family: root.contentFontFamily
+            font.pixelSize: Style.font.caption
+            font.bold: true
           }
         }
 
-        Meter {
-          width: parent.width
-          value: parent.pct
-          fill: parent.hot ? root.urgent : root.fill
+        Column {
+          id: resetCol
+          anchors.right: parent.right
+          anchors.verticalCenter: parent.verticalCenter
+          spacing: Style.space(1)
+
+          Text {
+            text: Model.formatResetsLabel(card.primary ? card.primary.resetsAt : "")
+            color: root.dim
+            font.family: root.contentFontFamily
+            font.pixelSize: Style.font.caption
+            horizontalAlignment: Text.AlignRight
+            anchors.right: parent.right
+          }
+
+          Text {
+            visible: card.pace >= 0
+            text: card.hot ? "Ahead of pace" : "On pace"
+            color: card.hot ? root.urgent : root.dim
+            font.family: root.contentFontFamily
+            font.pixelSize: Style.font.caption
+            horizontalAlignment: Text.AlignRight
+            anchors.right: parent.right
+          }
         }
       }
-    }
 
-    Text {
-      visible: card.provider && card.provider.hasLocalStats && Number(card.provider.todayTotalTokens) > 0
-      width: parent.width
-      text: card.provider
-        ? Model.formatTokenCount(card.provider.todayTotalTokens) + " tokens today"
-        : ""
-      color: root.dim
-      font.family: root.contentFontFamily
-      font.pixelSize: Style.font.caption
+      PaceMeter {
+        visible: card.primaryPct >= 0
+        width: parent.width
+        value: card.primaryPct
+        pace: card.pace
+        fill: card.barFill
+        weekly: Model.windowKind(card.primary) === "weekly"
+      }
+
+      Repeater {
+        model: card.limits.length > 1 ? card.limits.slice(1) : []
+
+        Column {
+          required property var modelData
+          width: inner.width
+          spacing: Style.space(5)
+
+          readonly property real pct: root.limitPercent(modelData)
+
+          Item {
+            width: parent.width
+            implicitHeight: extraLabel.implicitHeight
+
+            Text {
+              id: extraLabel
+              text: String(modelData.title || modelData.label || "Limit") + " · "
+                + (parent.parent.pct >= 0 ? Math.round(parent.parent.pct * 100) + "%" : "—")
+              color: root.contentForeground
+              font.family: root.contentFontFamily
+              font.pixelSize: Style.font.bodySmall
+              anchors.left: parent.left
+              anchors.verticalCenter: parent.verticalCenter
+            }
+
+            Text {
+              visible: index === 0
+              text: Model.formatResetsLabel(modelData.resetsAt)
+              color: root.dim
+              font.family: root.contentFontFamily
+              font.pixelSize: Style.font.caption
+              anchors.right: parent.right
+              anchors.verticalCenter: parent.verticalCenter
+            }
+          }
+
+          PaceMeter {
+            width: parent.width
+            value: parent.pct
+            pace: Model.expectedPace(modelData, root.nowMs)
+            fill: parent.pct >= 0.9 ? root.urgent : Qt.lighter(root.magilla, 1.25)
+            weekly: false
+          }
+        }
+      }
+
+      Text {
+        visible: card.provider && Number(card.provider.todayTotalTokens) > 0
+        width: parent.width
+        text: Model.formatTokenCount(card.provider.todayTotalTokens) + " tokens today"
+          + (card.provider.todayPrompts > 0 ? " · " + card.provider.todayPrompts + " prompts" : "")
+        color: root.dim
+        font.family: root.contentFontFamily
+        font.pixelSize: Style.font.caption
+      }
     }
   }
 
-  component Meter: Item {
+  component PaceMeter: Item {
     id: meter
     property real value: -1
-    property color fill: root.fill
-    implicitHeight: Math.max(Style.space(6), Math.round(Style.spacing.controlHeight * 0.18))
+    property real pace: -1
+    property color fill: root.magilla
+    property bool weekly: false
+    implicitHeight: Math.max(Style.space(8), Math.round(Style.spacing.controlHeight * 0.22))
 
     Rectangle {
       id: meterTrack
       anchors.fill: parent
       radius: height / 2
       color: root.track
+      clip: true
 
       Rectangle {
         anchors.left: parent.left
@@ -370,8 +475,29 @@ Panel {
         radius: meterTrack.radius
         width: meterTrack.width * root.clamp(meter.value, 0, 1)
         color: meter.fill
-        Behavior on width { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+        Behavior on width { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
       }
+
+      Repeater {
+        model: meter.weekly ? 6 : 0
+        Rectangle {
+          required property int index
+          width: 1
+          height: parent.height
+          x: parent.width * ((index + 1) / 7)
+          color: Qt.rgba(root.contentForeground.r, root.contentForeground.g, root.contentForeground.b, 0.18)
+        }
+      }
+    }
+
+    Rectangle {
+      visible: meter.pace >= 0
+      width: Style.space(2)
+      height: parent.height + Style.space(4)
+      radius: 1
+      x: parent.width * root.clamp(meter.pace, 0, 1) - width / 2
+      anchors.verticalCenter: parent.verticalCenter
+      color: Color.accent
     }
   }
 }
