@@ -211,12 +211,19 @@ function barLabel(provider, style) {
   return name + " " + formatPercent(used)
 }
 
+function safeDisplayText(value, maxLen) {
+  var s = String(value || "").replace(/[\x00-\x1F\x7F]/g, " ").replace(/\s+/g, " ").trim()
+  var limit = maxLen || 64
+  if (s.length > limit) s = s.slice(0, limit)
+  return s
+}
+
 function tooltipLine(provider, nowMs) {
   if (!provider) return ""
   var name = provider.providerName || knownName(provider.providerId)
   var used = usedPercent(provider)
   var parts = [name]
-  if (provider.tierLabel) parts.push(String(provider.tierLabel))
+  if (provider.tierLabel) parts.push(safeDisplayText(provider.tierLabel, 48))
   if (used >= 0) parts.push(formatPercent(used) + " used")
   var limit = bindingLimit(provider)
   if (limit && limit.resetsAt) {
@@ -403,7 +410,7 @@ function mergeProviders(catalog, records, settings) {
     if (!rec || !rec.id) continue
     var target = ensure(String(rec.id), rec.name)
     target.ready = rec.ready === true
-    target.tierLabel = String(rec.tierLabel || "")
+    target.tierLabel = safeDisplayText(rec.tierLabel || "", 48)
     target.usageStatusText = String(rec.usageStatusText || "")
     target.authHelpText = String(rec.authHelpText || "")
     target.limits = Array.isArray(rec.limits) ? rec.limits : []

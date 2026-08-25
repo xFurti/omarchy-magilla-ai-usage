@@ -9,8 +9,12 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import tempfile
+import time
+import urllib.error
+import urllib.request
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -18,9 +22,40 @@ from typing import Any
 # Hard cap for authenticated HTTP JSON (billing/plan payloads are tiny).
 MAX_HTTP_JSON_BYTES = 1_048_576
 _HTTP_READ_CHUNK = 65_536
+_DEFAULT_HTTP_TIMEOUT = 15.0
+_SAFE_DISPLAY = re.compile(r"[^\w\s.+/\-()]+", re.UNICODE)
 
 
-def read_http_json(response: Any, max_bytes: int = MAX_HTTP_JSON_BYTES) -> Any:
+class _RefuseRedirect(urllib.request.HTTPRedirectHandler):
+  """Do not follow redirects. urllib copies Authorization to the next hop."""
+
+  def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: ANN001
+    raise urllib.error.HTTPError(
+      getattr(req, "full_url", newurl),
+      code,
+      "HTTP redirect refused for authenticated Magilla requests",
+      headers,
+      fp,
+    )
+
+
+_http_opener = urllib.request.build_opener(_RefuseRedirect)
+
+
+def safe_display_text(value: Any, max_len: int = 64) -> str:
+  """Strip control chars and markup from provider-controlled UI strings."""
+  text = " ".join(str(value or "").split())
+  text = _SAFE_DISPLAY.sub("", text).strip()
+  if len(text) > max_len:
+    text = text[:max_len].rstrip()
+  return text
+
+
+def read_http_json(
+  response: Any,
+  max_bytes: int = MAX_HTTP_JSON_BYTES,
+  deadline: float | None = None,
+) -> Any:
   """Decode a JSON HTTP body without letting it grow without bound."""
   length = response.headers.get("Content-Length") if getattr(response, "headers", None) else None
   if length is not None:
@@ -33,6 +68,8 @@ def read_http_json(response: Any, max_bytes: int = MAX_HTTP_JSON_BYTES) -> Any:
   chunks: list[bytes] = []
   total = 0
   while True:
+    if deadline is not None and time.monotonic() >= deadline:
+      raise TimeoutError("HTTP JSON read exceeded Magilla deadline")
     chunk = response.read(min(_HTTP_READ_CHUNK, max(1, max_bytes - total + 1)))
     if not chunk:
       break
@@ -41,6 +78,18 @@ def read_http_json(response: Any, max_bytes: int = MAX_HTTP_JSON_BYTES) -> Any:
       raise ValueError("HTTP response exceeded Magilla's JSON body limit")
     chunks.append(chunk)
   return json.loads(b"".join(chunks).decode("utf-8", errors="replace"))
+
+
+def open_http_json(
+  request: urllib.request.Request,
+  timeout: float = _DEFAULT_HTTP_TIMEOUT,
+  max_bytes: int = MAX_HTTP_JSON_BYTES,
+) -> Any:
+  """GET/POST JSON with no redirects, a whole-call deadline, and a body cap."""
+  timeout = max(0.2, float(timeout))
+  deadline = time.monotonic() + timeout
+  with _http_opener.open(request, timeout=timeout) as response:
+    return read_http_json(response, max_bytes=max_bytes, deadline=deadline)
 
 
 def home() -> Path:

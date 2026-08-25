@@ -83,8 +83,7 @@ def _dashboard_post(url: str, token: str) -> dict[str, Any]:
     },
   )
   try:
-    with urllib.request.urlopen(request, timeout=15) as response:
-      payload = lib.read_http_json(response)
+    payload = lib.open_http_json(request, timeout=15)
   except urllib.error.HTTPError as error:
     if error.code in (401, 403):
       return {"ok": False, "auth": True, "helpText": "Cursor rejected the saved sign-in. Open Cursor and sign in."}
@@ -99,7 +98,7 @@ def _parse_usage(plan: dict[str, Any], usage: dict[str, Any]) -> dict[str, Any]:
   bucket = usage.get("planUsage") if isinstance(usage.get("planUsage"), dict) else {}
   start = _ms_to_iso(usage.get("billingCycleStart"))
   end = _ms_to_iso(usage.get("billingCycleEnd") or info.get("billingCycleEnd"))
-  tier = str(info.get("planName") or "").strip()
+  tier = lib.safe_display_text(info.get("planName") or "")
   limits: list[dict[str, Any]] = []
   cursor_models = _used_ratio(bucket.get("autoPercentUsed"))
   other_models = _used_ratio(bucket.get("apiPercentUsed"))

@@ -110,8 +110,7 @@ def _probe_go_usage(api_key: str) -> dict[str, Any]:
     },
   )
   try:
-    with urllib.request.urlopen(request, timeout=15) as response:
-      payload = lib.read_http_json(response)
+    payload = lib.open_http_json(request, timeout=15)
   except urllib.error.HTTPError as error:
     if error.code in (401, 403):
       return {"ok": False, "auth": True, "helpText": "OpenCode Go rejected the saved API key. Run /connect again."}
