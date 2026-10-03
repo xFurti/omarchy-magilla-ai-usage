@@ -12,6 +12,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+import codex as codex_limits
 import lib
 
 OFFICIAL_AGENTS = (
@@ -72,22 +73,19 @@ def _run_collector(path: Path, force: bool, limits_only: bool) -> dict[str, Any]
 
 def collect_official(agent_id: str, name: str, force: bool, limits_only: bool) -> dict[str, Any]:
   path = _collector_path(agent_id)
-  if path is not None:
-    record = _run_collector(path, force, limits_only)
-    if record:
-      record.setdefault("id", agent_id)
-      record.setdefault("name", name)
-      return record
-
-  existing = lib.read_json(lib.omarchy_usage_dir() / f"{agent_id}.json")
-  if existing:
-    existing.setdefault("id", agent_id)
-    existing.setdefault("name", name)
-    return existing
-
-  record = lib.base_record(agent_id, name)
-  record["usageStatusText"] = f"{name} collector unavailable"
-  record["authHelpText"] = f"Install the {name} CLI, or wait for Omarchy's usage updater."
+  record = _run_collector(path, force, limits_only) if path is not None else None
+  if not record:
+    record = lib.read_json(lib.omarchy_usage_dir() / f"{agent_id}.json")
+  if not record:
+    record = lib.base_record(agent_id, name)
+    record["usageStatusText"] = f"{name} collector unavailable"
+    record["authHelpText"] = f"Install the {name} CLI, or wait for Omarchy's usage updater."
+  record.setdefault("id", agent_id)
+  record.setdefault("name", name)
+  # account/read often times out and the packaged collector then returns no
+  # windows. Read the quota directly, and complete kind/start when it did answer.
+  if agent_id == "codex":
+    record = codex_limits.fill_windows(record, force=force)
   return record
 
 
