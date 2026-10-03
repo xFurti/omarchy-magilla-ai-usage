@@ -22,7 +22,9 @@ Item {
   readonly property string updaterPath: pluginDir + "/collectors/magilla-usage-update"
 
   property var catalog: ({ providers: [] })
+  property string catalogKey: ""
   property var records: ({})
+  property string recordsKey: ""
   property var magillaIds: []
   property var omarchyIds: []
   property int dataRevision: 0
@@ -55,17 +57,32 @@ Item {
     printErrors: false
     onFileChanged: reload()
     onLoaded: root.parseCatalog(text())
-    onLoadFailed: root.catalog = ({ providers: [] })
+    onLoadFailed: {
+      // Drop the signature too, or the next good catalog with the same
+      // contents would be ignored and the panel would stay empty.
+      root.catalogKey = ""
+      root.catalog = ({ providers: [] })
+    }
+  }
+
+  function catalogSignature(parsed) {
+    var copy = {}
+    for (var key in parsed) if (key !== "updatedAt") copy[key] = parsed[key]
+    return JSON.stringify(copy)
   }
 
   function parseCatalog(content) {
+    var parsed = ({ providers: [] })
     try {
-      var parsed = JSON.parse(String(content || ""))
-      root.catalog = parsed && typeof parsed === "object" ? parsed : ({ providers: [] })
+      var raw = JSON.parse(String(content || ""))
+      if (raw && typeof raw === "object") parsed = raw
     } catch (e) {
       console.warn("magilla-ai-usage", "Ignoring bad detection catalog", e)
-      root.catalog = ({ providers: [] })
     }
+    var key = root.catalogSignature(parsed)
+    if (key === root.catalogKey) return
+    root.catalogKey = key
+    root.catalog = parsed
     root.dataRevision++
   }
 
@@ -136,6 +153,10 @@ Item {
   }
 
   function rebuildRecords() {
+    rebuildTimer.restart()
+  }
+
+  function commitRecords() {
     var next = {}
     function absorb(instantiator) {
       for (var i = 0; i < instantiator.count; i++) {
@@ -149,8 +170,19 @@ Item {
     }
     absorb(omarchyAgents)
     absorb(magillaAgents)
+    var key = ""
+    try { key = JSON.stringify(next) } catch (e) { key = "" }
+    if (key !== "" && key === root.recordsKey) return
+    if (key !== "") root.recordsKey = key
     records = next
     dataRevision++
+  }
+
+  Timer {
+    id: rebuildTimer
+    interval: 80
+    repeat: false
+    onTriggered: root.commitRecords()
   }
 
   Process {

@@ -480,13 +480,21 @@ Panel {
       clip: true
 
       Rectangle {
+        id: meterFill
+        property bool settle: false
         anchors.left: parent.left
         anchors.verticalCenter: parent.verticalCenter
         height: parent.height
         radius: meterTrack.radius
-        width: meterTrack.width * root.clamp(meter.value, 0, 1)
+        // Whole pixels. A fractional width restarts the animation on every
+        // layout pass, which reads as the bar flickering.
+        width: Math.round(meterTrack.width * root.clamp(meter.value, 0, 1))
         color: meter.fill
-        Behavior on width { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+        Behavior on width {
+          enabled: meterFill.settle
+          NumberAnimation { duration: 180; easing.type: Easing.OutCubic }
+        }
+        onWidthChanged: if (width > 0 && !settle) Qt.callLater(function() { meterFill.settle = true })
       }
 
       Repeater {
