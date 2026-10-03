@@ -10,6 +10,7 @@ import os
 import sqlite3
 import urllib.error
 import urllib.request
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -63,15 +64,50 @@ def _tier_label() -> str:
 
 
 def _ratio(raw: Any) -> float | None:
+  """OpenCode Go sends percent on a 0–100 scale (percent: 1 means 1%, not 100%)."""
   if raw is None or raw == "":
     return None
   try:
     n = float(raw)
   except (TypeError, ValueError):
     return None
-  if n > 1:
-    n = n / 100.0
-  return min(1.0, max(0.0, n))
+  if n != n:
+    return None
+  return min(1.0, max(0.0, n / 100.0))
+
+
+def _reset_still_ahead(limit: dict[str, Any], now: float) -> bool | None:
+  raw = str(limit.get("resetsAt") or "").strip()
+  if not raw:
+    return None
+  try:
+    when = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+  except ValueError:
+    return None
+  if when.tzinfo is None:
+    when = when.replace(tzinfo=timezone.utc)
+  return when.timestamp() > now
+
+
+def _limits_in_force(limits: list[Any]) -> list[dict[str, Any]]:
+  """Drop a snapshot whose windows have all already reset.
+
+  A percent belongs to the window that produced it. After that window ends,
+  the old percent is not current usage.
+  """
+  rows = [item for item in limits if isinstance(item, dict)]
+  if not rows:
+    return []
+  now = lib.time_now()
+  dated = False
+  for item in rows:
+    ahead = _reset_still_ahead(item, now)
+    if ahead is None:
+      return rows
+    dated = True
+    if ahead:
+      return rows
+  return [] if dated else rows
 
 
 def _window_node(payload: dict[str, Any], name: str) -> dict[str, Any] | None:
@@ -185,16 +221,18 @@ def collect(force: bool = False, limits_only: bool = False) -> dict[str, Any]:
   record["tierLabel"] = _tier_label()
 
   if not api_key:
-    record["limits"] = fallback_limits
-    record["ready"] = bool(fallback_limits or record.get("hasLocalStats"))
+    fresh = _limits_in_force(fallback_limits)
+    record["limits"] = fresh
+    record["ready"] = bool(fresh or record.get("hasLocalStats"))
     if not record["ready"]:
       record["usageStatusText"] = "OpenCode is installed"
       record["authHelpText"] = AUTH_HELP
     return record
 
   fetched_at = lib.number(cached.get("fetchedAtMs")) / 1000
-  if fallback_limits and not force and lib.time_now() - fetched_at < PROBE_MIN_INTERVAL_SECONDS:
-    record["limits"] = fallback_limits
+  fresh = _limits_in_force(fallback_limits)
+  if fresh and not force and lib.time_now() - fetched_at < PROBE_MIN_INTERVAL_SECONDS:
+    record["limits"] = fresh
     record["ready"] = True
     return record
 
@@ -212,14 +250,17 @@ def collect(force: bool = False, limits_only: bool = False) -> dict[str, Any]:
     record["ready"] = True
     return record
 
-  record["limits"] = fallback_limits
-  record["ready"] = bool(fallback_limits or record.get("hasLocalStats"))
+  # A rejected key must not keep painting the last successful percent.
+  # The same rule applies when every cached window has already reset.
+  fresh = [] if probe.get("auth") else _limits_in_force(fallback_limits)
+  record["limits"] = fresh
+  record["ready"] = bool(fresh or record.get("hasLocalStats"))
   if probe.get("transport"):
     record["retryAdvised"] = True
   if probe.get("auth"):
     record["usageStatusText"] = "OpenCode Go sign-in rejected"
     record["authHelpText"] = AUTH_HELP
-  elif not fallback_limits:
+  elif not fresh:
     record["usageStatusText"] = "OpenCode Go limits unavailable"
     record["authHelpText"] = str(probe.get("helpText") or AUTH_HELP)
   return record

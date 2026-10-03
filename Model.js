@@ -83,15 +83,28 @@ function providerEnabled(settings, id, authenticated) {
   return authenticated === true
 }
 
+function normalizedPercent(value) {
+  var p = Number(value)
+  if (!isFinite(p) || p < 0) return -1
+  return Math.min(1, p > 1 ? p / 100 : p)
+}
+
 function usedPercent(provider) {
   if (!provider) return -1
   var limits = provider.limits || []
   var best = -1
+  var headline = -1
   for (var i = 0; i < limits.length; i++) {
-    var p = Number(limits[i] && limits[i].percent)
-    if (isFinite(p) && p >= 0) best = Math.max(best, p)
+    var entry = limits[i] || {}
+    var p = normalizedPercent(entry.percent)
+    if (p < 0) continue
+    // Independent pools are not one quota. The collector marks the number
+    // the provider itself calls "included usage"; the chip follows that.
+    if (entry.headline === true) headline = p
+    if (p > best) best = p
   }
-  if (best >= 0) return best > 1 ? Math.min(1, best / 100) : Math.min(1, best)
+  if (headline >= 0) return headline
+  if (best >= 0) return best
   var balance = provider.balance
   if (balance && numberValue(balance.funded) > 0) {
     var remaining = numberValue(balance.remaining)
@@ -110,22 +123,22 @@ function bindingLimit(provider) {
   if (!provider) return null
   var limits = provider.limits || []
   var best = null
+  var head = null
   for (var i = 0; i < limits.length; i++) {
     var entry = limits[i] || {}
-    var percent = Number(entry.percent)
-    if (!isFinite(percent) || percent < 0) continue
-    if (percent > 1) percent = percent / 100
-    if (!best || percent > best.percent) {
-      best = {
-        label: String(entry.label || ""),
-        title: String(entry.title || entry.label || "Limit"),
-        percent: Math.min(1, percent),
-        resetsAt: String(entry.resetsAt || ""),
-        startsAt: String(entry.startsAt || "")
-      }
+    var percent = normalizedPercent(entry.percent)
+    if (percent < 0) continue
+    var built = {
+      label: String(entry.label || ""),
+      title: String(entry.title || entry.label || "Limit"),
+      percent: percent,
+      resetsAt: String(entry.resetsAt || ""),
+      startsAt: String(entry.startsAt || "")
     }
+    if (entry.headline === true) head = built
+    if (!best || percent > best.percent) best = built
   }
-  return best
+  return head || best
 }
 
 function statusOf(provider) {
@@ -261,12 +274,14 @@ function hasLiveData(provider) {
 }
 
 function windowKind(limit) {
+  var explicit = String((limit && limit.kind) || "").toLowerCase()
+  if (explicit === "5-hour" || explicit === "weekly" || explicit === "monthly" || explicit === "session")
+    return explicit
   var text = String((limit && (limit.title || limit.label)) || "").toLowerCase()
   if (text.indexOf("5-hour") >= 0 || text.indexOf("5h") >= 0 || text.indexOf("rolling") >= 0)
     return "5-hour"
   if (text.indexOf("week") >= 0) return "weekly"
-  if (text.indexOf("month") >= 0 || text.indexOf("cursor") >= 0 || text.indexOf("other") >= 0)
-    return "monthly"
+  if (text.indexOf("month") >= 0) return "monthly"
   if (text.indexOf("session") >= 0) return "session"
   return "limit"
 }

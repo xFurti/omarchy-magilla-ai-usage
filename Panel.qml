@@ -38,7 +38,9 @@ Panel {
   }
 
   function limitPercent(entry) {
-    var p = Number(entry && entry.percent)
+    if (!entry || entry.percent === undefined || entry.percent === null || entry.percent === "")
+      return -1
+    var p = Number(entry.percent)
     if (!isFinite(p) || p < 0) return -1
     return p > 1 ? Math.min(1, p / 100) : Math.min(1, p)
   }
@@ -352,7 +354,9 @@ Panel {
           Text {
             text: {
               var kind = Model.windowKind(card.primary)
-              return "of " + kind + " limit"
+              if (kind && kind !== "limit") return "of " + kind + " limit"
+              var label = String((card.primary && (card.primary.label || card.primary.title)) || "Usage")
+              return label
             }
             color: root.dim
             font.family: root.contentFontFamily

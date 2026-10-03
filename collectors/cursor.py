@@ -93,6 +93,32 @@ def _dashboard_post(url: str, token: str) -> dict[str, Any]:
   return {"ok": True, "payload": payload if isinstance(payload, dict) else {}}
 
 
+def _spend_ratio(bucket: dict[str, Any]) -> float | None:
+  """Cursor's own "included usage" sentence is includedSpend / limit, not the *PercentUsed fields."""
+  try:
+    spent = float(bucket.get("includedSpend"))
+    cap = float(bucket.get("limit"))
+  except (TypeError, ValueError):
+    return None
+  if cap <= 0 or spent != spent or cap != cap:
+    return None
+  return min(1.0, max(0.0, spent / cap))
+
+
+def _limit(label: str, title: str, percent: float, start: str, end: str, headline: bool = False) -> dict[str, Any]:
+  entry: dict[str, Any] = {
+    "label": label,
+    "title": title,
+    "kind": "monthly",
+    "percent": percent,
+    "resetsAt": end,
+    "startsAt": start,
+  }
+  if headline:
+    entry["headline"] = True
+  return entry
+
+
 def _parse_usage(plan: dict[str, Any], usage: dict[str, Any]) -> dict[str, Any]:
   info = plan.get("planInfo") if isinstance(plan.get("planInfo"), dict) else {}
   bucket = usage.get("planUsage") if isinstance(usage.get("planUsage"), dict) else {}
@@ -100,34 +126,22 @@ def _parse_usage(plan: dict[str, Any], usage: dict[str, Any]) -> dict[str, Any]:
   end = _ms_to_iso(usage.get("billingCycleEnd") or info.get("billingCycleEnd"))
   tier = lib.safe_display_text(info.get("planName") or "")
   limits: list[dict[str, Any]] = []
-  cursor_models = _used_ratio(bucket.get("autoPercentUsed"))
-  other_models = _used_ratio(bucket.get("apiPercentUsed"))
-  if cursor_models is not None:
-    limits.append({
-      "label": "Cursor models",
-      "title": "Cursor models",
-      "percent": cursor_models,
-      "resetsAt": end,
-      "startsAt": start,
-    })
-  if other_models is not None:
-    limits.append({
-      "label": "Other models",
-      "title": "Other models",
-      "percent": other_models,
-      "resetsAt": end,
-      "startsAt": start,
-    })
-  if not limits:
-    total = _used_ratio(bucket.get("totalPercentUsed") or usage.get("totalPercentUsed"))
-    if total is not None:
-      limits.append({
-        "label": "Monthly included",
-        "title": "Monthly",
-        "percent": total,
-        "resetsAt": end,
-        "startsAt": start,
-      })
+  # displayMessage is includedSpend/limit ("57% of your included usage").
+  # totalPercentUsed matches "included total usage". apiPercentUsed matches
+  # "included API usage". autoPercentUsed is a different internal metric and
+  # does not match any of those sentences, so it is not shown beside them.
+  included = _spend_ratio(bucket)
+  total = _used_ratio(bucket.get("totalPercentUsed") or usage.get("totalPercentUsed"))
+  api = _used_ratio(bucket.get("apiPercentUsed"))
+  auto = _used_ratio(bucket.get("autoPercentUsed"))
+  if included is not None:
+    limits.append(_limit("Included usage", "Monthly", included, start, end, headline=True))
+  if total is not None:
+    limits.append(_limit("Included total", "Total", total, start, end, headline=included is None))
+  if api is not None:
+    limits.append(_limit("API usage", "API", api, start, end, headline=not limits))
+  if not limits and auto is not None:
+    limits.append(_limit("Auto", "Auto", auto, start, end, headline=True))
   if not limits:
     return {}
   return {"ready": True, "tierLabel": tier or "Cursor", "limits": limits}
