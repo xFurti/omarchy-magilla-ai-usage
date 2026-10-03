@@ -64,9 +64,13 @@ Panel {
   }
 
   function close() {
-    setCenterHoverRevealSuppressed(false)
+    // Hide before touching the bar flag. On Omarchy 4 the plugin bar facade
+    // exposes centerHoverRevealSuppressed as read-only; a failed write used
+    // to abort this function before controller.hide(), so the overlay stayed
+    // up and ignored the chip, Esc, and outside clicks.
     root.settingsOpen = false
     root.controller.hide()
+    setCenterHoverRevealSuppressed(false)
   }
 
   function toggle() {
@@ -85,7 +89,13 @@ Panel {
   }
 
   function setCenterHoverRevealSuppressed(value) {
-    if (root.bar && "centerHoverRevealSuppressed" in root.bar)
+    if (!root.bar) return
+    if (typeof root.bar.setCenterHoverRevealSuppressed === "function") {
+      root.bar.setCenterHoverRevealSuppressed(value)
+      return
+    }
+    // Shells before the plugin bar facade exposed a writable property.
+    if ("centerHoverRevealSuppressed" in root.bar)
       root.bar.centerHoverRevealSuppressed = value
   }
 
@@ -400,6 +410,7 @@ Panel {
 
         Column {
           required property var modelData
+          required property int index
           width: inner.width
           spacing: Style.space(5)
 
