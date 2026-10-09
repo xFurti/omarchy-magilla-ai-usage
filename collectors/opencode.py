@@ -161,6 +161,35 @@ def _probe_go_usage(api_key: str) -> dict[str, Any]:
   return {"ok": True, "limits": limits}
 
 
+_LOCAL_KEYS = (
+  "hasLocalStats",
+  "hasPromptStats",
+  "todayPrompts",
+  "todaySessions",
+  "todayTotalTokens",
+  "todayTokensByModel",
+  "recentDays",
+  "totalPrompts",
+  "totalSessions",
+  "activeDays",
+  "activeDates",
+  "modelUsage",
+)
+
+
+def _remembered_local() -> dict[str, Any]:
+  """Keep session totals when the panel asks for limits only.
+
+  A limits refresh used to publish a brand-new record with zero sessions.
+  The full refresh then put the sessions back and marked the provider ready,
+  so OpenCode Go appeared in the panel and vanished again a few seconds later.
+  """
+  previous = lib.read_json(lib.magilla_usage_dir() / f"{AGENT_ID}.json") or {}
+  if not isinstance(previous, dict):
+    return {}
+  return {key: previous[key] for key in _LOCAL_KEYS if key in previous}
+
+
 def _scan_local() -> dict[str, Any]:
   db = _db_path()
   if not db.is_file():
@@ -210,7 +239,7 @@ def _scan_local() -> dict[str, Any]:
 
 def collect(force: bool = False, limits_only: bool = False) -> dict[str, Any]:
   record = lib.base_record(AGENT_ID, AGENT_NAME, scope="account")
-  local = {} if limits_only else _scan_local()
+  local = _remembered_local() if limits_only else _scan_local()
   if local:
     record.update(local)
 
@@ -223,8 +252,10 @@ def collect(force: bool = False, limits_only: bool = False) -> dict[str, Any]:
   if not api_key:
     fresh = _limits_in_force(fallback_limits)
     record["limits"] = fresh
-    record["ready"] = bool(fresh or record.get("hasLocalStats"))
-    if not record["ready"]:
+    # Local sessions are not a quota. Ready is reserved for windows still in
+    # force, otherwise the panel shows an empty OpenCode Go card.
+    record["ready"] = bool(fresh)
+    if not fresh:
       record["usageStatusText"] = "OpenCode is installed"
       record["authHelpText"] = AUTH_HELP
     return record
@@ -254,7 +285,7 @@ def collect(force: bool = False, limits_only: bool = False) -> dict[str, Any]:
   # The same rule applies when every cached window has already reset.
   fresh = [] if probe.get("auth") else _limits_in_force(fallback_limits)
   record["limits"] = fresh
-  record["ready"] = bool(fresh or record.get("hasLocalStats"))
+  record["ready"] = bool(fresh)
   if probe.get("transport"):
     record["retryAdvised"] = True
   if probe.get("auth"):
