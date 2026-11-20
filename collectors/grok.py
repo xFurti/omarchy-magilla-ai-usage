@@ -281,6 +281,9 @@ def collect(force: bool = False, limits_only: bool = False) -> dict[str, Any]:
       "ready": bool(fallback_limits or fallback_balance or record.get("hasLocalStats")),
       "usageStatusText": "Waiting for auth",
       "authHelpText": AUTH_HELP,
+      # Kept numbers from the last successful probe, not live ones.
+      "limitsStale": bool(fallback_limits or fallback_balance),
+      "limitsFetchedAt": round(lib.number(cached.get("fetchedAtMs"))),
     })
     return record
 
@@ -321,6 +324,8 @@ def collect(force: bool = False, limits_only: bool = False) -> dict[str, Any]:
     "balance": fallback_balance,
     "tierLabel": fallback_tier or str(probe.get("tierLabel") or ""),
     "ready": bool(fallback_limits or fallback_balance or record.get("hasLocalStats")),
+    "limitsStale": bool(fallback_limits or fallback_balance),
+    "limitsFetchedAt": round(fetched_at * 1000),
   })
   if probe.get("transport"):
     record["retryAdvised"] = True
