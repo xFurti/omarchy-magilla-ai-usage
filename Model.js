@@ -141,6 +141,37 @@ function bindingLimit(provider) {
   return head || best
 }
 
+// Collectors keep the last known limits when a probe can't run (lapsed or
+// refused sign-in, network). Omarchy's first-party records say so with
+// limitsStale/limitsFetchedAt; a "Sign-in expired" status with limits still
+// present means the same thing for collectors that don't set the flag.
+var STALE_STATUS_TEXT = ["Sign-in expired"]
+
+function isStale(provider) {
+  if (!provider) return false
+  if (provider.limitsStale === true) return true
+  var limits = provider.limits || []
+  return limits.length > 0 && STALE_STATUS_TEXT.indexOf(String(provider.usageStatusText || "")) >= 0
+}
+
+function formatAge(fetchedAtMs, nowMs) {
+  var at = numberValue(fetchedAtMs)
+  if (!(at > 0)) return ""
+  var age = numberValue(nowMs || Date.now()) - at
+  if (age < 60000) return "just now"
+  return formatDuration(age) + " ago"
+}
+
+function staleLabel(provider, nowMs) {
+  if (!isStale(provider)) return ""
+  var parts = ["Stale"]
+  var age = formatAge(provider.limitsFetchedAt, nowMs)
+  if (age) parts.push("last checked " + age)
+  var why = safeDisplayText(provider.usageStatusText, 48)
+  if (why) parts.push(why)
+  return parts.join(" · ")
+}
+
 function statusOf(provider) {
   if (!provider) return "idle"
   if (provider.authenticated === false && provider.installed) return "waiting"
@@ -244,7 +275,9 @@ function tooltipLine(provider, nowMs) {
     if (reset) parts.push(reset)
   }
   if (used < 0) parts.push(statusLabel(statusOf(provider)))
-  return parts.join(" · ")
+  var line = parts.join(" · ")
+  var stale = staleLabel(provider, nowMs)
+  return stale ? line + "\n  " + stale : line
 }
 
 function tooltipSummary(providers, nowMs) {
@@ -383,6 +416,8 @@ function mergeProviders(catalog, records, settings) {
       usageStatusText: "",
       authHelpText: "",
       limits: [],
+      limitsStale: false,
+      limitsFetchedAt: 0,
       balance: null,
       todayPrompts: 0,
       todaySessions: 0,
@@ -429,6 +464,8 @@ function mergeProviders(catalog, records, settings) {
     target.usageStatusText = String(rec.usageStatusText || "")
     target.authHelpText = String(rec.authHelpText || "")
     target.limits = Array.isArray(rec.limits) ? rec.limits : []
+    target.limitsStale = rec.limitsStale === true
+    target.limitsFetchedAt = numberValue(rec.limitsFetchedAt)
     target.balance = rec.balance && typeof rec.balance === "object" ? rec.balance : null
     target.todayPrompts = numberValue(rec.todayPrompts)
     target.todaySessions = numberValue(rec.todaySessions)
@@ -458,6 +495,7 @@ function mergeProviders(catalog, records, settings) {
     p.remainingPercent = remainingPercent(p)
     p.headline = bindingLimit(p)
     p.hasLiveData = hasLiveData(p)
+    p.stale = isStale(p)
     p.visibleInPanel = !!(p.enabled && p.hasLiveData)
     if (p.visibleInPanel || p.known) out.push(p)
   }

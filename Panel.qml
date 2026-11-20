@@ -329,8 +329,21 @@ Panel {
         }
       }
 
+      Text {
+        readonly property string label: Model.staleLabel(card.provider, root.nowMs)
+        visible: label !== ""
+        width: parent.width
+        text: label
+        textFormat: Text.PlainText
+        color: root.urgent
+        font.family: root.contentFontFamily
+        font.pixelSize: Style.font.caption
+        wrapMode: Text.WordWrap
+      }
+
       Item {
         visible: card.primaryPct >= 0
+        opacity: card.provider && card.provider.stale ? 0.6 : 1
         width: parent.width
         implicitHeight: Math.max(pctNum.implicitHeight, resetCol.implicitHeight)
 

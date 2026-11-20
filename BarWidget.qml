@@ -121,6 +121,8 @@ BarWidget {
           required property var modelData
           spacing: Style.space(5)
           anchors.verticalCenter: parent.verticalCenter
+          // Last known numbers, not live ones: dim the chip; the tooltip says why.
+          opacity: modelData.stale ? 0.5 : 1
 
           Image {
             width: Style.space(13)
@@ -142,6 +144,7 @@ BarWidget {
               var used = Model.usedPercent(modelData)
               return used < 0 ? "—" : Model.formatPercent(used)
             }
+            font.italic: modelData.stale === true
             color: (modelData.status === "exhausted" || modelData.status === "low") ? root.alarm : root.fg
             font.family: root.bar ? root.bar.fontFamily : Style.font.family
             font.pixelSize: Style.font.bodySmall
@@ -170,6 +173,7 @@ BarWidget {
 
         Image {
           required property var modelData
+          opacity: modelData.stale ? 0.5 : 1
           width: Style.space(14)
           height: Style.space(14)
           anchors.horizontalCenter: parent.horizontalCenter
